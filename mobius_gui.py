@@ -62,11 +62,20 @@ DEFAULTS = {
     "titan_timeout": 300,
     "titan_model": "mistralai/Mistral-7B-Instruct-v0.3",
     "agent_allowed_tools": ["read_file", "write_file", "list_dir", "add_reminder", "rag_search", "rag_add", "rag_add_file"],
+    "agent_max_steps": 5,
     "max_context": 12,
     "hw_refresh_ms": 2000,
+    "conn_check_ms": 10000,
     "cpu_alert": 90,
     "gpu_temp_alert": 85,
     "ram_alert": 95,
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "max_new_tokens": 512,
+    "notify_on_response": True,
+    "notify_on_agent": True,
+    "system_prompt_override": "",
+    "tts_voice": "pl-PL-ZofiaNeural",
 }
 
 PONTIFEX_SYSTEM_PROMPT = """Jesteś Pontifex Rex — główny architekt systemu MOBIUS.
@@ -95,6 +104,9 @@ def _load_config() -> dict:
         alerts = data.get("alerts", {})
         titan = data.get("titan", {})
         agent = data.get("agent", {})
+        inference = data.get("inference", {})
+        notifications = data.get("notifications", {})
+        persona = data.get("persona", {})
         return {
             "ollama_host": ollama.get("host", DEFAULTS["ollama_host"]),
             "ollama_timeout": ollama.get("timeout_seconds", DEFAULTS["ollama_timeout"]),
@@ -105,11 +117,20 @@ def _load_config() -> dict:
             "titan_timeout": titan.get("timeout_seconds", DEFAULTS["titan_timeout"]),
             "titan_model": titan.get("default_model", DEFAULTS["titan_model"]),
             "agent_allowed_tools": agent.get("allowed_tools", DEFAULTS["agent_allowed_tools"]),
+            "agent_max_steps": int(agent.get("max_steps", DEFAULTS["agent_max_steps"])),
             "max_context": gui.get("max_context_messages", DEFAULTS["max_context"]),
             "hw_refresh_ms": gui.get("hardware_refresh_interval_ms", DEFAULTS["hw_refresh_ms"]),
+            "conn_check_ms": gui.get("connection_check_interval_ms", DEFAULTS.get("conn_check_ms", 10000)),
             "cpu_alert": alerts.get("cpu_threshold_percent", 90),
             "gpu_temp_alert": alerts.get("gpu_temp_threshold_c", 85),
             "ram_alert": alerts.get("ram_threshold_percent", 95),
+            "temperature": float(inference.get("temperature", DEFAULTS["temperature"])),
+            "top_p": float(inference.get("top_p", DEFAULTS["top_p"])),
+            "max_new_tokens": int(inference.get("max_new_tokens", DEFAULTS["max_new_tokens"])),
+            "notify_on_response": notifications.get("on_response", DEFAULTS["notify_on_response"]),
+            "notify_on_agent": notifications.get("on_agent", DEFAULTS["notify_on_agent"]),
+            "system_prompt_override": persona.get("system_prompt_override", DEFAULTS["system_prompt_override"]),
+            "tts_voice": data.get("voice", {}).get("tts_voice", "pl-PL-ZofiaNeural"),
         }
     except Exception as e:
         log.warning("Nie można wczytać config: %s", e)
@@ -207,13 +228,19 @@ def ollama_generate_stream(
     prompt: str,
     system: str,
     timeout: float = 90,
+    temperature: float = 0.7,
+    top_p: float = 0.9,
+    num_predict: int = 512,
 ):
     """
     Generator — zwraca tokeny po kolei (streaming).
     Yields (token, done).
     """
     url = f"{base_url}/api/generate"
-    payload = {"model": model, "prompt": prompt, "system": system, "stream": True}
+    payload = {
+        "model": model, "prompt": prompt, "system": system, "stream": True,
+        "options": {"temperature": temperature, "top_p": top_p, "num_predict": num_predict},
+    }
     try:
         r = requests.post(url, json=payload, stream=True, timeout=timeout)
         r.raise_for_status()
@@ -241,13 +268,19 @@ def ollama_generate(
     system: str,
     timeout: float = 90,
     max_retries: int = 2,
+    temperature: float = 0.7,
+    top_p: float = 0.9,
+    num_predict: int = 512,
 ) -> tuple[str, float]:
     """
     Wywołaj Ollama /api/generate z retry.
     Zwraca (odpowiedź, czas_generacji_sekundy).
     """
     url = f"{base_url}/api/generate"
-    payload = {"model": model, "prompt": prompt, "system": system, "stream": False}
+    payload = {
+        "model": model, "prompt": prompt, "system": system, "stream": False,
+        "options": {"temperature": temperature, "top_p": top_p, "num_predict": num_predict},
+    }
     last_error: Optional[Exception] = None
 
     for attempt in range(max_retries + 1):
@@ -536,7 +569,32 @@ class MobiusGUI(ctk.CTk):
             text_color=self.colors["text"],
             command=self._on_copy,
         )
-        self.copy_btn.pack(padx=16, pady=(0, 8))
+        self.copy_btn.pack(padx=16, pady=(0, 4))
+
+        self.settings_btn = ctk.CTkButton(
+            self.sidebar,
+            text="⚙️ Ustawienia",
+            width=200,
+            height=28,
+            fg_color=self.colors["bg_card"],
+            hover_color=self.colors["accent_dim"],
+            text_color=self.colors["text"],
+            command=self._open_settings,
+        )
+        self.settings_btn.pack(padx=16, pady=(0, 8))
+
+    def _open_settings(self) -> None:
+        from mobius_settings import SettingsDialog
+        d = SettingsDialog(self, self.colors, on_save=self._reload_config)
+        d.focus()
+
+    def _reload_config(self) -> None:
+        self.config = _load_config()
+        self.ollama_base = self.config["ollama_host"].rstrip("/")
+        self.ollama_timeout = self.config["ollama_timeout"]
+        self.max_context = self.config["max_context"]
+        self.hw_refresh_ms = self.config["hw_refresh_ms"]
+        self._log("Konfiguracja odświeżona.")
 
     def _on_backend_change(self, _value: str) -> None:
         backend = self.backend_var.get()
@@ -609,8 +667,9 @@ class MobiusGUI(ctk.CTk):
                 self._log("TTS: pip install edge-tts")
                 return
             self._log("Odtwarzam...")
+            voice = self.config.get("tts_voice", "pl-PL-ZofiaNeural")
             threading.Thread(
-                target=lambda: tts_speak(last[:3000], blocking=True),
+                target=lambda: tts_speak(last[:3000], voice=voice, blocking=True),
                 daemon=True,
             ).start()
         except ImportError:
@@ -633,8 +692,19 @@ class MobiusGUI(ctk.CTk):
         except Exception:
             self._log("Błąd schowka.")
 
+    def _get_system_prompt(self) -> str:
+        """System prompt — nadpisany lub domyślny."""
+        override = self.config.get("system_prompt_override", "").strip()
+        return override if override else PONTIFEX_SYSTEM_PROMPT
+
     def _notify(self, title: str, msg: str) -> None:
-        """Powiadomienie Windows (toast). Opcjonalne — winotify."""
+        """Powiadomienie Windows (toast). Sprawdza config."""
+        if title == "MOBIUS" and msg == "Odpowiedź gotowa.":
+            if not self.config.get("notify_on_response", True):
+                return
+        elif title == "MOBIUS" and msg == "Agent zakończony.":
+            if not self.config.get("notify_on_agent", True):
+                return
         try:
             from winotify import Notification
             n = Notification(app_id="MOBIUS", title=title, msg=msg)
@@ -971,11 +1041,18 @@ class MobiusGUI(ctk.CTk):
                     prompt=p,
                     system=sys,
                     timeout=self.ollama_timeout,
+                    temperature=self.config.get("temperature", 0.7),
+                    top_p=self.config.get("top_p", 0.9),
+                    num_predict=self.config.get("max_new_tokens", 512),
                 )
                 return resp
 
-            system = PONTIFEX_SYSTEM_PROMPT + "\n\nMasz dostęp do narzędzi. Używaj ich gdy potrzebne."
-            response, steps = run_agent_loop(_generate, user_text, system, allowed_tools=allowed)
+            system = self._get_system_prompt() + "\n\nMasz dostęp do narzędzi. Używaj ich gdy potrzebne."
+            response, steps = run_agent_loop(
+                _generate, user_text, system,
+                allowed_tools=allowed,
+                max_steps=self.config.get("agent_max_steps", 5),
+            )
             for s in steps:
                 self.after(0, lambda msg=s: self._log(msg))
 
@@ -1014,9 +1091,10 @@ class MobiusGUI(ctk.CTk):
                         host=self.config.get("titan_host", "localhost"),
                         port=self.config.get("titan_port", 50051),
                         prompt=prompt,
-                        system=PONTIFEX_SYSTEM_PROMPT,
+                        system=self._get_system_prompt(),
                         model_id=self.config.get("titan_model", ""),
-                        max_new_tokens=512,
+                        max_new_tokens=self.config.get("max_new_tokens", 512),
+                        temperature=self.config.get("temperature", 0.7),
                         timeout=self.config.get("titan_timeout", 300),
                     )
                 else:
@@ -1024,8 +1102,11 @@ class MobiusGUI(ctk.CTk):
                         base_url=self.ollama_base,
                         model=self.model_var.get(),
                         prompt=prompt,
-                        system=PONTIFEX_SYSTEM_PROMPT,
+                        system=self._get_system_prompt(),
                         timeout=self.ollama_timeout,
+                        temperature=self.config.get("temperature", 0.7),
+                        top_p=self.config.get("top_p", 0.9),
+                        num_predict=self.config.get("max_new_tokens", 512),
                     )
 
                 for token, done in stream_gen:
@@ -1047,8 +1128,11 @@ class MobiusGUI(ctk.CTk):
                         self.ollama_base,
                         self.model_var.get(),
                         prompt,
-                        PONTIFEX_SYSTEM_PROMPT,
+                        self._get_system_prompt(),
                         timeout=self.ollama_timeout,
+                        temperature=self.config.get("temperature", 0.7),
+                        top_p=self.config.get("top_p", 0.9),
+                        num_predict=self.config.get("max_new_tokens", 512),
                     )
                     response = resp_text or response
                     def _fallback_update() -> None:
