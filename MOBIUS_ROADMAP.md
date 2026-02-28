@@ -15,11 +15,10 @@ Cel: autonomiczny AGI w stylu asystentów z uniwersum Marvel.
 | Tryb Agent (checkbox) | ✅ | mobius_gui.py |
 
 ### Narzędzia agenta
-- `read_file(path)` — odczyt pliku
-- `write_file(path, content)` — zapis pliku
-- `list_dir(path)` — listowanie katalogu
-- `run_shell(command)` — PowerShell
-- `execute_script(name, *args)` — skrypty Python z mobius
+- `read_file`, `write_file`, `list_dir` — pliki
+- `add_reminder(text, when)` — przypomnienia
+- `rag_search`, `rag_add`, `rag_add_file` — baza wiedzy
+- `run_shell`, `execute_script` — wymagają włączenia w `agent.allowed_tools` (bezpieczeństwo)
 
 ---
 
@@ -32,6 +31,7 @@ Cel: autonomiczny AGI w stylu asystentów z uniwersum Marvel.
 
 ### Faza 3 — Pamięć rozszerzona ✅
 - [x] RAG — baza wiedzy (ChromaDB)
+- [x] agent.allowed_tools — run_shell wyłączony domyślnie
 - [ ] Embeddingi — semantyczne wyszukiwanie
 - [ ] Hierarchia pamięci (krótko/długoterminowa)
 

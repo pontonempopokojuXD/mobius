@@ -1,10 +1,17 @@
 # MOBIUS — Distributed AI System
 
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+> Lokalne centrum dowodzenia w stylu JARVIS/FRIDAY — autonomiczny AGI.
+
 ```
 Node 1 (Linux/Sentinel) ──── gRPC ────► Node 2 (Windows/Titan)
   faster-whisper + VAD               RTX 5060 Ti | 4-bit LLM
   local subprocess router            Hard VRAM purge after infer
 ```
+
+**GitHub:** [github.com/pontonempopokojuXD/mobius](https://github.com/pontonempopokojuXD/mobius)
 
 ---
 
@@ -29,21 +36,27 @@ mobius/
 ├── generated/
 │   ├── mobius_pb2.py             # (generated) protobuf stubs
 │   └── mobius_pb2_grpc.py        # (generated) gRPC stubs
-├── mobius_gui.py                 # GUI — lokalne centrum dowodzenia (Ollama + Tytan)
-├── mobius_config.json            # Konfiguracja GUI (host, timeout, modele)
-├── requirements_gui.txt          # Zależności GUI
-├── memory.json                   # (generowany) Sentinel Memory — historia rozmów
-├── DEPLOY.md                     # Przewodnik wdrożenia na laptop serwerowy
+├── mobius_gui.py                 # GUI — centrum dowodzenia (Ollama + Titan)
+├── mobius_agent.py               # Agent ReAct — narzędzia (pliki, RAG, shell)
+├── mobius_voice.py               # STT (mikrofon) + TTS (edge-tts)
+├── mobius_rag.py                # Baza wiedzy (ChromaDB)
+├── mobius_reminders.py          # Przypomnienia
+├── mobius_titan_client.py       # Klient gRPC do Titan (backend GUI)
+├── mobius_config.json           # Konfiguracja GUI
+├── requirements_gui.txt         # Zależności GUI
+├── MOBIUS_ROADMAP.md            # Roadmap do JARVIS/FRIDAY
+├── DEPLOY.md                    # Przewodnik wdrożenia
 ├── scripts/
-│   ├── start_gui.bat             # Uruchom GUI (Windows)
-│   ├── start_titan.bat           # Uruchom Titan Node (Windows)
-│   └── start_sentinel.sh         # Uruchom Sentinel (Linux)
+│   ├── setup_gui.bat            # Instalacja zależności GUI
+│   ├── start_gui.bat            # Uruchom GUI
+│   ├── start_titan.bat          # Uruchom Titan Node
+│   └── start_sentinel.sh        # Uruchom Sentinel (Linux)
 ├── node1_linux/
-│   ├── sentinel_node.py          # Master: VAD + Whisper + router
+│   ├── sentinel_node.py         # Master: VAD + Whisper + router
 │   └── requirements.txt
 └── node2_windows/
-    ├── titan_node.py             # Worker: gRPC server + LLM + VRAM purge
-    ├── triton_kernels.py         # Fused RMSNorm + SwiGLU Triton kernels
+    ├── titan_node.py            # Worker: gRPC + LLM + VRAM purge
+    ├── triton_kernels.py       # Fused RMSNorm + SwiGLU
     └── requirements.txt
 ```
 
@@ -70,9 +83,25 @@ pip install -r requirements_gui.txt
 python mobius_gui.py
 ```
 
-**Funkcje:** streaming odpowiedzi, głos (STT/TTS), tryb Agent (ReAct + narzędzia).
+**Funkcje:** streaming odpowiedzi, głos (STT/TTS), tryb Agent (ReAct), backend Ollama lub Titan.
 
-Wymaga: **Ollama** na `http://localhost:11434`. Głos: `edge-tts`, `SpeechRecognition`, `PyAudio`.
+| Funkcja | Opis |
+|---------|------|
+| **Streaming** | Odpowiedzi token po tokenie |
+| **Głos** | Mikrofon (STT) + Odtwarzanie (TTS, edge-tts) |
+| **Agent** | ReAct + narzędzia: pliki, RAG, przypomnienia, shell |
+| **Backend** | Ollama (szybkie) lub Titan (modele 7B+) |
+
+**Wymaga:** Ollama na `http://localhost:11434`. Opcjonalnie Titan (gRPC :50051) dla większych modeli.
+
+### Narzędzia agenta
+
+| Narzędzie | Opis |
+|-----------|------|
+| `read_file`, `write_file`, `list_dir` | Pliki |
+| `add_reminder(text, when)` | Przypomnienia |
+| `rag_search(query)`, `rag_add(text)`, `rag_add_file(path)` | Baza wiedzy |
+| `run_shell(command)` | PowerShell (wymaga włączenia w config) |
 
 ---
 

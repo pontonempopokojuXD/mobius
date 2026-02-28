@@ -160,10 +160,10 @@ TOOLS: dict[str, Callable[..., str]] = {
 }
 
 
-def execute_tool(action_str: str) -> Optional[str]:
+def execute_tool(action_str: str, allowed_tools: Optional[set[str]] = None) -> Optional[str]:
     """
     Parsuj Action: tool(args) i wykonaj.
-    Zwraca wynik lub None jeśli nie rozpoznano.
+    allowed_tools: jeśli podane, tylko te narzędzia dozwolone.
     """
     # Action: read_file("path") lub Action: run_shell("cmd")
     m = re.search(r"Action:\s*(\w+)\s*\((.*)\)", action_str, re.DOTALL | re.IGNORECASE)
@@ -173,6 +173,8 @@ def execute_tool(action_str: str) -> Optional[str]:
     args_str = m.group(2).strip()
     if tool_name not in TOOLS:
         return f"Narzędzie nieznane: {tool_name}"
+    if allowed_tools is not None and tool_name not in allowed_tools:
+        return f"Narzędzie niedozwolone: {tool_name}. Włącz w mobius_config.json → agent.allowed_tools"
     # Parsuj argumenty — obsługa "a", "b" oraz "a, b" w content
     args = []
     for match in re.finditer(r'"((?:[^"\\]|\\.)*)"|([^,\s]+)', args_str):
@@ -194,23 +196,38 @@ def extract_final_answer(text: str) -> Optional[str]:
     return None
 
 
+def _build_tool_descriptions(allowed: Optional[list[str]] = None) -> str:
+    """Buduj opis narzędzi (tylko dozwolone)."""
+    tools = allowed or list(TOOLS.keys())
+    lines = [
+        "Dostępne narzędzia (Action: nazwa(arg1, arg2)):",
+        "- read_file(path), write_file(path, content), list_dir(path)",
+        "- add_reminder(text, when), rag_search(query, n), rag_add(text), rag_add_file(path)",
+        "- run_shell(command), execute_script(name, *args)",
+        "Final Answer: <odpowiedź> gdy gotowe.",
+    ]
+    return "\n".join(lines)
+
+
 def run_agent_loop(
     generate_fn: Callable[[str, str], str],
     user_query: str,
     system_prompt: str,
     max_steps: int = 5,
+    allowed_tools: Optional[list[str]] = None,
 ) -> tuple[str, list[str]]:
     """
     ReAct loop: Thought → Action → Observation → ...
-    generate_fn(prompt, system) -> response
-    Zwraca (finalna_odpowiedź, lista kroków do logowania).
+    allowed_tools: lista dozwolonych (domyślnie wszystkie oprócz run_shell, execute_script).
     """
     steps: list[str] = []
+    allowed_set = set(allowed_tools) if allowed_tools else set(TOOLS.keys())
+    tool_desc = _build_tool_descriptions(allowed_tools)
     prompt = f"""Użytkownik: {user_query}
 
-{TOOL_DESCRIPTIONS}
+{tool_desc}
 
-Zacznij od Thought: (przeanalizuj pytanie), potem Action: (jeśli potrzebujesz narzędzia) lub Final Answer: (jeśli możesz odpowiedzieć)."""
+Zacznij od Thought:, potem Action: lub Final Answer:"""
 
     for step in range(max_steps):
         response = generate_fn(prompt, system_prompt)
@@ -220,7 +237,7 @@ Zacznij od Thought: (przeanalizuj pytanie), potem Action: (jeśli potrzebujesz n
         if final:
             return final, steps
 
-        action_result = execute_tool(response)
+        action_result = execute_tool(response, allowed_set)
         if action_result is None:
             # Model nie wywołał Action — traktuj całość jako odpowiedź
             return response.strip(), steps

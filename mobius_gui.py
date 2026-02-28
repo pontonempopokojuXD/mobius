@@ -57,6 +57,11 @@ DEFAULTS = {
     "ollama_timeout": 90,
     "default_models": ["llama3.2:1b", "llama3.2:3b", "llama3:8b"],
     "fetch_models": True,
+    "titan_host": os.environ.get("TITAN_HOST", "localhost"),
+    "titan_port": int(os.environ.get("TITAN_PORT", "50051")),
+    "titan_timeout": 300,
+    "titan_model": "mistralai/Mistral-7B-Instruct-v0.3",
+    "agent_allowed_tools": ["read_file", "write_file", "list_dir", "add_reminder", "rag_search", "rag_add", "rag_add_file"],
     "max_context": 12,
     "hw_refresh_ms": 2000,
     "cpu_alert": 90,
@@ -88,11 +93,18 @@ def _load_config() -> dict:
         ollama = data.get("ollama", {})
         gui = data.get("gui", {})
         alerts = data.get("alerts", {})
+        titan = data.get("titan", {})
+        agent = data.get("agent", {})
         return {
             "ollama_host": ollama.get("host", DEFAULTS["ollama_host"]),
             "ollama_timeout": ollama.get("timeout_seconds", DEFAULTS["ollama_timeout"]),
             "default_models": ollama.get("default_models", DEFAULTS["default_models"]),
             "fetch_models": ollama.get("fetch_models_from_api", DEFAULTS["fetch_models"]),
+            "titan_host": titan.get("host", DEFAULTS["titan_host"]),
+            "titan_port": int(titan.get("port", DEFAULTS["titan_port"])),
+            "titan_timeout": titan.get("timeout_seconds", DEFAULTS["titan_timeout"]),
+            "titan_model": titan.get("default_model", DEFAULTS["titan_model"]),
+            "agent_allowed_tools": agent.get("allowed_tools", DEFAULTS["agent_allowed_tools"]),
             "max_context": gui.get("max_context_messages", DEFAULTS["max_context"]),
             "hw_refresh_ms": gui.get("hardware_refresh_interval_ms", DEFAULTS["hw_refresh_ms"]),
             "cpu_alert": alerts.get("cpu_threshold_percent", 90),
@@ -402,7 +414,7 @@ class MobiusGUI(ctk.CTk):
 
         self.status_label = ctk.CTkLabel(
             self.sidebar,
-            text="● Ollama: sprawdzam...",
+            text="● Backend: sprawdzam...",
             font=ctk.CTkFont(family="Consolas", size=10),
             text_color=self.colors["text_dim"],
         )
@@ -435,9 +447,28 @@ class MobiusGUI(ctk.CTk):
         sep = ctk.CTkFrame(self.sidebar, height=1, fg_color=self.colors["border"])
         sep.pack(fill="x", padx=12, pady=12)
 
+        self.backend_var = ctk.StringVar(value="Ollama")
+        backend_lbl = ctk.CTkLabel(
+            self.sidebar,
+            text="Backend",
+            font=ctk.CTkFont(family="Consolas", size=10),
+            text_color=self.colors["text_dim"],
+        )
+        backend_lbl.pack(anchor="w", padx=16, pady=(0, 4))
+        self.backend_dropdown = ctk.CTkOptionMenu(
+            self.sidebar,
+            values=["Ollama", "Titan"],
+            variable=self.backend_var,
+            width=200,
+            fg_color=self.colors["bg_card"],
+            button_color=self.colors["accent_dim"],
+            command=self._on_backend_change,
+        )
+        self.backend_dropdown.pack(padx=16, pady=(0, 4))
+
         model_lbl = ctk.CTkLabel(
             self.sidebar,
-            text="Model Ollama",
+            text="Model",
             font=ctk.CTkFont(family="Consolas", size=10),
             text_color=self.colors["text_dim"],
         )
@@ -494,6 +525,35 @@ class MobiusGUI(ctk.CTk):
             command=self._on_tts,
         )
         self.tts_btn.pack(padx=16, pady=(0, 8))
+
+    def _on_backend_change(self, _value: str) -> None:
+        backend = self.backend_var.get()
+        if backend == "Titan":
+            tm = self.config.get("titan_model", "mistralai/Mistral-7B-Instruct-v0.3")
+            self.model_dropdown.configure(values=[tm])
+            self.model_var.set(tm)
+            self._check_titan_connection()
+        else:
+            models = self.config.get("default_models") or ["llama3.2:1b"]
+            self.model_dropdown.configure(values=models)
+            self.model_var.set(models[0])
+        self._log(f"Backend: {backend}")
+
+    def _check_titan_connection(self) -> None:
+        def _run() -> None:
+            try:
+                from mobius_titan_client import titan_available
+                ok = titan_available(
+                    self.config.get("titan_host", "localhost"),
+                    self.config.get("titan_port", 50051),
+                )
+                def _update() -> None:
+                    self._log("Titan: online" if ok else "Titan: offline")
+                self.after(0, _update)
+            except ImportError:
+                self.after(0, lambda: self._log("Titan: pip install grpcio"))
+
+        threading.Thread(target=_run, daemon=True).start()
 
     def _on_model_change(self, _value: str) -> None:
         self._log(f"Model: {self.model_var.get()}")
@@ -732,24 +792,32 @@ class MobiusGUI(ctk.CTk):
 
     def _check_connection(self) -> None:
         def _run() -> None:
-            ok = ollama_available(self.ollama_base)
+            backend = self.backend_var.get() if hasattr(self, "backend_var") else "Ollama"
+            if backend == "Titan":
+                try:
+                    from mobius_titan_client import titan_available
+                    ok = titan_available(
+                        self.config.get("titan_host", "localhost"),
+                        self.config.get("titan_port", 50051),
+                    )
+                except ImportError:
+                    ok = False
+            else:
+                ok = ollama_available(self.ollama_base)
 
             def _update() -> None:
                 self.ollama_online = ok
+                b = self.backend_var.get() if hasattr(self, "backend_var") else "Ollama"
                 if ok:
-                    self.status_label.configure(
-                        text="● Ollama: online",
-                        text_color=self.colors["success"],
-                    )
-                    if self.config.get("fetch_models") and not self._models_fetched:
+                    lbl = "● Titan: online" if b == "Titan" else "● Ollama: online"
+                    self.status_label.configure(text=lbl, text_color=self.colors["success"])
+                    if b == "Ollama" and self.config.get("fetch_models") and not self._models_fetched:
                         self._models_fetched = True
                         self._refresh_models()
                 else:
-                    self.status_label.configure(
-                        text="● Ollama: offline",
-                        text_color=self.colors["error"],
-                    )
-                self._log("Ollama: online" if ok else "Ollama: offline")
+                    lbl = "● Titan: offline" if b == "Titan" else "● Ollama: offline"
+                    self.status_label.configure(text=lbl, text_color=self.colors["error"])
+                self._log(f"{b}: {'online' if ok else 'offline'}")
 
             self.after(0, _update)
 
@@ -836,7 +904,25 @@ class MobiusGUI(ctk.CTk):
         try:
             from mobius_agent import run_agent_loop
 
+            backend = self.backend_var.get()
+            allowed = self.config.get("agent_allowed_tools")
+
             def _generate(p: str, sys: str) -> str:
+                if backend == "Titan":
+                    try:
+                        from mobius_titan_client import titan_infer
+                        text, _ = titan_infer(
+                            host=self.config.get("titan_host", "localhost"),
+                            port=self.config.get("titan_port", 50051),
+                            prompt=p,
+                            system=sys,
+                            model_id=self.config.get("titan_model", ""),
+                            max_new_tokens=512,
+                            timeout=self.config.get("titan_timeout", 300),
+                        )
+                        return text
+                    except ImportError:
+                        return "[Titan: pip install grpcio]"
                 resp, _ = ollama_generate(
                     base_url=self.ollama_base,
                     model=self.model_var.get(),
@@ -847,7 +933,7 @@ class MobiusGUI(ctk.CTk):
                 return resp
 
             system = PONTIFEX_SYSTEM_PROMPT + "\n\nMasz dostęp do narzędzi. Używaj ich gdy potrzebne."
-            response, steps = run_agent_loop(_generate, user_text, system)
+            response, steps = run_agent_loop(_generate, user_text, system, allowed_tools=allowed)
             for s in steps:
                 self.after(0, lambda msg=s: self._log(msg))
 
@@ -866,10 +952,10 @@ class MobiusGUI(ctk.CTk):
             self.after(0, _err)
 
     def _run_streaming(self, prompt: str, user_text: str) -> None:
-        """Streaming — token po tokenie."""
+        """Streaming — token po tokenie (Ollama lub Titan)."""
         start = time.perf_counter()
         full_response: list[str] = []
-        model = self.model_var.get()
+        backend = self.backend_var.get()
 
         def _stream() -> None:
             try:
@@ -879,13 +965,27 @@ class MobiusGUI(ctk.CTk):
                     self.chat_text.configure(state="disabled")
                 self.after(0, _prefix)
 
-                for token, done in ollama_generate_stream(
-                    base_url=self.ollama_base,
-                    model=model,
-                    prompt=prompt,
-                    system=PONTIFEX_SYSTEM_PROMPT,
-                    timeout=self.ollama_timeout,
-                ):
+                if backend == "Titan":
+                    from mobius_titan_client import titan_infer_stream
+                    stream_gen = titan_infer_stream(
+                        host=self.config.get("titan_host", "localhost"),
+                        port=self.config.get("titan_port", 50051),
+                        prompt=prompt,
+                        system=PONTIFEX_SYSTEM_PROMPT,
+                        model_id=self.config.get("titan_model", ""),
+                        max_new_tokens=512,
+                        timeout=self.config.get("titan_timeout", 300),
+                    )
+                else:
+                    stream_gen = ollama_generate_stream(
+                        base_url=self.ollama_base,
+                        model=self.model_var.get(),
+                        prompt=prompt,
+                        system=PONTIFEX_SYSTEM_PROMPT,
+                        timeout=self.ollama_timeout,
+                    )
+
+                for token, done in stream_gen:
                     full_response.append(token)
 
                     def _update(t=token) -> None:
