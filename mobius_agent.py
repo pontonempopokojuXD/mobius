@@ -196,16 +196,29 @@ def extract_final_answer(text: str) -> Optional[str]:
     return None
 
 
+_TOOL_SIGS: dict[str, str] = {
+    "read_file": "read_file(path)",
+    "write_file": "write_file(path, content)",
+    "list_dir": "list_dir(path)",
+    "run_shell": "run_shell(command)",
+    "execute_script": "execute_script(name, *args)",
+    "add_reminder": "add_reminder(text, when)",
+    "rag_search": "rag_search(query, n)",
+    "rag_add": "rag_add(text)",
+    "rag_add_file": "rag_add_file(path)",
+}
+
+
 def _build_tool_descriptions(allowed: Optional[list[str]] = None) -> str:
     """Buduj opis narzędzi (tylko dozwolone)."""
-    tools = allowed or list(TOOLS.keys())
-    lines = [
-        "Dostępne narzędzia (Action: nazwa(arg1, arg2)):",
-        "- read_file(path), write_file(path, content), list_dir(path)",
-        "- add_reminder(text, when), rag_search(query, n), rag_add(text), rag_add_file(path)",
-        "- run_shell(command), execute_script(name, *args)",
-        "Final Answer: <odpowiedź> gdy gotowe.",
-    ]
+    tools = set(allowed) if allowed else set(TOOLS.keys())
+    available = [t for t in TOOLS if t in tools]
+    if not available:
+        return "Brak dostępnych narzędzi.\nFinal Answer: <odpowiedź> gdy gotowe."
+    lines = ["Dostępne narzędzia (Action: nazwa(arg1, arg2)):"]
+    for t in available:
+        lines.append(f"- {_TOOL_SIGS.get(t, t)}")
+    lines.append("Final Answer: <odpowiedź> gdy gotowe.")
     return "\n".join(lines)
 
 

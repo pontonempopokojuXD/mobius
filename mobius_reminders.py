@@ -42,7 +42,10 @@ def add_reminder(text: str, when: Optional[str] = None) -> str:
 
 
 def get_due_reminders() -> list[str]:
-    """Zwróć listę przypomnień do wyświetlenia (uproszczone — wszystkie aktywne)."""
+    """Zwróć listę przypomnień do wyświetlenia.
+    TODO: obecnie zwraca ostatnie 10 przypomnień bez sprawdzania when.
+    Docelowo: filtrować po dacie/czasie (when) — np. ISO datetime, 'za 1h', 'jutro'.
+    """
     reminders = load_reminders()
     return [r["text"] for r in reminders[-10:] if r.get("text")]
 

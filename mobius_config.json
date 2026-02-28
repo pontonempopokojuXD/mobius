@@ -2,7 +2,11 @@
   "ollama": {
     "host": "http://localhost:11434",
     "timeout_seconds": 90,
-    "default_models": ["llama3.2:1b", "llama3.2:3b", "llama3:8b"],
+    "default_models": [
+      "qwen2.5:7b",
+      "llama3.2:3b",
+      "llama3.2:1b"
+    ],
     "fetch_models_from_api": true
   },
   "titan": {
@@ -12,7 +16,15 @@
     "default_model": "mistralai/Mistral-7B-Instruct-v0.3"
   },
   "agent": {
-    "allowed_tools": ["read_file", "write_file", "list_dir", "add_reminder", "rag_search", "rag_add", "rag_add_file"]
+    "allowed_tools": [
+      "read_file",
+      "write_file",
+      "list_dir",
+      "add_reminder",
+      "rag_search",
+      "rag_add",
+      "rag_add_file"
+    ]
   },
   "gui": {
     "window_width": 1280,

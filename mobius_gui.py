@@ -55,7 +55,7 @@ MEMORY_FILE = MOBIUS_ROOT / "memory.json"
 DEFAULTS = {
     "ollama_host": os.environ.get("OLLAMA_HOST", "http://localhost:11434"),
     "ollama_timeout": 90,
-    "default_models": ["llama3.2:1b", "llama3.2:3b", "llama3:8b"],
+    "default_models": ["qwen2.5:7b", "llama3.2:3b", "llama3.2:1b"],
     "fetch_models": True,
     "titan_host": os.environ.get("TITAN_HOST", "localhost"),
     "titan_port": int(os.environ.get("TITAN_PORT", "50051")),
@@ -534,9 +534,8 @@ class MobiusGUI(ctk.CTk):
             self.model_var.set(tm)
             self._check_titan_connection()
         else:
-            models = self.config.get("default_models") or ["llama3.2:1b"]
-            self.model_dropdown.configure(values=models)
-            self.model_var.set(models[0])
+            self._models_fetched = False
+            self._refresh_models()
         self._log(f"Backend: {backend}")
 
     def _check_titan_connection(self) -> None:
@@ -567,7 +566,10 @@ class MobiusGUI(ctk.CTk):
                     self.model_var.set(models[0])
                     self._log(f"Modele: {', '.join(models[:5])}{'...' if len(models) > 5 else ''}")
                 else:
-                    self._log("Nie można pobrać listy modeli (Ollama offline?)")
+                    fallback = self.config.get("default_models") or ["qwen2.5:7b", "llama3.2:3b"]
+                    self.model_dropdown.configure(values=fallback)
+                    self.model_var.set(fallback[0])
+                    self._log("Ollama offline — używam listy domyślnej. Kliknij 'Odśwież modele' gdy Ollama będzie działać.")
 
             self.after(0, _update)
 
