@@ -99,12 +99,13 @@ class SettingsDialog(ctk.CTkToplevel):
         lbl.pack(anchor="w", pady=(12, 4))
         return parent
 
-    def _row(self, parent: ctk.CTkFrame, label: str, widget: ctk.CTkBaseClass) -> None:
+    def _row(self, parent: ctk.CTkFrame, label: str) -> ctk.CTkFrame:
+        """Zwraca ramkę (grid) — dodaj widget do niej: w.grid(row=0, column=1, sticky='ew')."""
         f = ctk.CTkFrame(parent, fg_color="transparent")
         f.pack(fill="x", pady=4)
         f.grid_columnconfigure(1, weight=1)
         ctk.CTkLabel(f, text=label, width=180, anchor="w", text_color=self.colors["text_dim"]).grid(row=0, column=0, sticky="w", padx=(0, 8))
-        widget.grid(row=0, column=1, sticky="ew")
+        return f
 
     def _tab_model(self) -> None:
         tab = self.tabview.add("Model")
@@ -112,13 +113,16 @@ class SettingsDialog(ctk.CTkToplevel):
 
         self._section(tab, "Parametry inferencji")
         self.temp_var = ctk.DoubleVar(value=float(self._get("inference", "temperature", 0.7)))
-        self._row(tab, "Temperature (0–2):", ctk.CTkSlider(tab, from_=0, to=2, variable=self.temp_var, width=200))
+        r = self._row(tab, "Temperature (0–2):")
+        ctk.CTkSlider(r, from_=0, to=2, variable=self.temp_var, width=200).grid(row=0, column=1, sticky="ew")
 
         self.top_p_var = ctk.DoubleVar(value=float(self._get("inference", "top_p", 0.9)))
-        self._row(tab, "Top-p:", ctk.CTkSlider(tab, from_=0, to=1, variable=self.top_p_var, width=200))
+        r = self._row(tab, "Top-p:")
+        ctk.CTkSlider(r, from_=0, to=1, variable=self.top_p_var, width=200).grid(row=0, column=1, sticky="ew")
 
         self.max_tokens_var = ctk.IntVar(value=int(self._get("inference", "max_new_tokens", 512)))
-        self._row(tab, "Max tokenów:", ctk.CTkEntry(tab, textvariable=self.max_tokens_var, width=100))
+        r = self._row(tab, "Max tokenów:")
+        ctk.CTkEntry(r, textvariable=self.max_tokens_var, width=100).grid(row=0, column=1, sticky="ew")
 
     def _tab_memory(self) -> None:
         tab = self.tabview.add("Pamięć")
@@ -126,17 +130,21 @@ class SettingsDialog(ctk.CTkToplevel):
 
         self._section(tab, "Kontekst rozmowy")
         self.max_context_var = ctk.IntVar(value=int(self._get("gui", "max_context_messages", 12)))
-        self._row(tab, "Wiadomości w kontekście:", ctk.CTkEntry(tab, textvariable=self.max_context_var, width=100))
+        r = self._row(tab, "Wiadomości w kontekście:")
+        ctk.CTkEntry(r, textvariable=self.max_context_var, width=100).grid(row=0, column=1, sticky="ew")
 
         self.max_stored_var = ctk.IntVar(value=int(self._get("memory", "max_messages_stored", 500)))
-        self._row(tab, "Max zapisanych wiadomości:", ctk.CTkEntry(tab, textvariable=self.max_stored_var, width=100))
+        r = self._row(tab, "Max zapisanych wiadomości:")
+        ctk.CTkEntry(r, textvariable=self.max_stored_var, width=100).grid(row=0, column=1, sticky="ew")
 
         self.auto_save_var = ctk.IntVar(value=int(self._get("memory", "auto_save_interval_seconds", 30)))
-        self._row(tab, "Auto-zapis (sekundy):", ctk.CTkEntry(tab, textvariable=self.auto_save_var, width=100))
+        r = self._row(tab, "Auto-zapis (sekundy):")
+        ctk.CTkEntry(r, textvariable=self.auto_save_var, width=100).grid(row=0, column=1, sticky="ew")
 
         self._section(tab, "RAG")
         self.rag_n_var = ctk.IntVar(value=int(self._get("rag", "n_results", 5)))
-        self._row(tab, "Wyników wyszukiwania:", ctk.CTkEntry(tab, textvariable=self.rag_n_var, width=100))
+        r = self._row(tab, "Wyników wyszukiwania:")
+        ctk.CTkEntry(r, textvariable=self.rag_n_var, width=100).grid(row=0, column=1, sticky="ew")
 
     def _tab_agent(self) -> None:
         tab = self.tabview.add("Agent")
@@ -144,7 +152,8 @@ class SettingsDialog(ctk.CTkToplevel):
 
         self._section(tab, "ReAct loop")
         self.max_steps_var = ctk.IntVar(value=int(self._get("agent", "max_steps", 5)))
-        self._row(tab, "Max kroków:", ctk.CTkEntry(tab, textvariable=self.max_steps_var, width=100))
+        r = self._row(tab, "Max kroków:")
+        ctk.CTkEntry(r, textvariable=self.max_steps_var, width=100).grid(row=0, column=1, sticky="ew")
 
         self._section(tab, "Narzędzia (zaznacz dozwolone)")
         allowed = set(self._get("agent", "allowed_tools", ["read_file", "write_file", "list_dir", "add_reminder", "rag_search", "rag_add", "rag_add_file"]))
@@ -162,11 +171,13 @@ class SettingsDialog(ctk.CTkToplevel):
         self._section(tab, "TTS (edge-tts)")
         voices = ["pl-PL-ZofiaNeural", "pl-PL-MarekNeural", "en-US-JennyNeural", "en-GB-SoniaNeural"]
         self.tts_voice_var = ctk.StringVar(value=self._get("voice", "tts_voice", "pl-PL-ZofiaNeural"))
-        self._row(tab, "Głos:", ctk.CTkOptionMenu(tab, values=voices, variable=self.tts_voice_var, width=200))
+        r = self._row(tab, "Głos:")
+        ctk.CTkOptionMenu(r, values=voices, variable=self.tts_voice_var, width=200).grid(row=0, column=1, sticky="ew")
 
         self._section(tab, "STT")
         self.stt_lang_var = ctk.StringVar(value=self._get("voice", "stt_language", "pl-PL"))
-        self._row(tab, "Język:", ctk.CTkOptionMenu(tab, values=["pl-PL", "en-US", "en-GB"], variable=self.stt_lang_var, width=150))
+        r = self._row(tab, "Język:")
+        ctk.CTkOptionMenu(r, values=["pl-PL", "en-US", "en-GB"], variable=self.stt_lang_var, width=150).grid(row=0, column=1, sticky="ew")
 
     def _tab_notifications(self) -> None:
         tab = self.tabview.add("Powiadomienia")
@@ -184,17 +195,22 @@ class SettingsDialog(ctk.CTkToplevel):
 
         self._section(tab, "Progi alertów (%)")
         self.cpu_alert_var = ctk.IntVar(value=int(self._get("alerts", "cpu_threshold_percent", 90)))
-        self._row(tab, "CPU:", ctk.CTkEntry(tab, textvariable=self.cpu_alert_var, width=80))
+        r = self._row(tab, "CPU:")
+        ctk.CTkEntry(r, textvariable=self.cpu_alert_var, width=80).grid(row=0, column=1, sticky="ew")
         self.ram_alert_var = ctk.IntVar(value=int(self._get("alerts", "ram_threshold_percent", 95)))
-        self._row(tab, "RAM:", ctk.CTkEntry(tab, textvariable=self.ram_alert_var, width=80))
+        r = self._row(tab, "RAM:")
+        ctk.CTkEntry(r, textvariable=self.ram_alert_var, width=80).grid(row=0, column=1, sticky="ew")
         self.gpu_temp_var = ctk.IntVar(value=int(self._get("alerts", "gpu_temp_threshold_c", 85)))
-        self._row(tab, "GPU temp (°C):", ctk.CTkEntry(tab, textvariable=self.gpu_temp_var, width=80))
+        r = self._row(tab, "GPU temp (°C):")
+        ctk.CTkEntry(r, textvariable=self.gpu_temp_var, width=80).grid(row=0, column=1, sticky="ew")
 
         self._section(tab, "Odświeżanie")
         self.hw_refresh_var = ctk.IntVar(value=int(self._get("gui", "hardware_refresh_interval_ms", 2000)))
-        self._row(tab, "Monitor sprzętu (ms):", ctk.CTkEntry(tab, textvariable=self.hw_refresh_var, width=100))
+        r = self._row(tab, "Monitor sprzętu (ms):")
+        ctk.CTkEntry(r, textvariable=self.hw_refresh_var, width=100).grid(row=0, column=1, sticky="ew")
         self.conn_refresh_var = ctk.IntVar(value=int(self._get("gui", "connection_check_interval_ms", 10000)))
-        self._row(tab, "Sprawdzenie połączenia (ms):", ctk.CTkEntry(tab, textvariable=self.conn_refresh_var, width=100))
+        r = self._row(tab, "Sprawdzenie połączenia (ms):")
+        ctk.CTkEntry(r, textvariable=self.conn_refresh_var, width=100).grid(row=0, column=1, sticky="ew")
 
     def _tab_connections(self) -> None:
         tab = self.tabview.add("Połączenia")
@@ -202,17 +218,22 @@ class SettingsDialog(ctk.CTkToplevel):
 
         self._section(tab, "Ollama")
         self.ollama_host_var = ctk.StringVar(value=self._get("ollama", "host", "http://localhost:11434"))
-        self._row(tab, "URL:", ctk.CTkEntry(tab, textvariable=self.ollama_host_var, width=280))
+        r = self._row(tab, "URL:")
+        ctk.CTkEntry(r, textvariable=self.ollama_host_var, width=280).grid(row=0, column=1, sticky="ew")
         self.ollama_timeout_var = ctk.IntVar(value=int(self._get("ollama", "timeout_seconds", 90)))
-        self._row(tab, "Timeout (s):", ctk.CTkEntry(tab, textvariable=self.ollama_timeout_var, width=80))
+        r = self._row(tab, "Timeout (s):")
+        ctk.CTkEntry(r, textvariable=self.ollama_timeout_var, width=80).grid(row=0, column=1, sticky="ew")
 
         self._section(tab, "Titan")
         self.titan_host_var = ctk.StringVar(value=self._get("titan", "host", "localhost"))
-        self._row(tab, "Host:", ctk.CTkEntry(tab, textvariable=self.titan_host_var, width=150))
+        r = self._row(tab, "Host:")
+        ctk.CTkEntry(r, textvariable=self.titan_host_var, width=150).grid(row=0, column=1, sticky="ew")
         self.titan_port_var = ctk.IntVar(value=int(self._get("titan", "port", 50051)))
-        self._row(tab, "Port:", ctk.CTkEntry(tab, textvariable=self.titan_port_var, width=80))
+        r = self._row(tab, "Port:")
+        ctk.CTkEntry(r, textvariable=self.titan_port_var, width=80).grid(row=0, column=1, sticky="ew")
         self.titan_timeout_var = ctk.IntVar(value=int(self._get("titan", "timeout_seconds", 300)))
-        self._row(tab, "Timeout (s):", ctk.CTkEntry(tab, textvariable=self.titan_timeout_var, width=80))
+        r = self._row(tab, "Timeout (s):")
+        ctk.CTkEntry(r, textvariable=self.titan_timeout_var, width=80).grid(row=0, column=1, sticky="ew")
 
     def _tab_persona(self) -> None:
         tab = self.tabview.add("Persona")
