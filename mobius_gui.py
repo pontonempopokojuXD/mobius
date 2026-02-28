@@ -524,7 +524,19 @@ class MobiusGUI(ctk.CTk):
             text_color=self.colors["text_dim"],
             command=self._on_tts,
         )
-        self.tts_btn.pack(padx=16, pady=(0, 8))
+        self.tts_btn.pack(padx=16, pady=(0, 4))
+
+        self.copy_btn = ctk.CTkButton(
+            self.sidebar,
+            text="📋 Kopiuj",
+            width=200,
+            height=28,
+            fg_color=self.colors["bg_card"],
+            hover_color=self.colors["accent_dim"],
+            text_color=self.colors["text"],
+            command=self._on_copy,
+        )
+        self.copy_btn.pack(padx=16, pady=(0, 8))
 
     def _on_backend_change(self, _value: str) -> None:
         backend = self.backend_var.get()
@@ -604,6 +616,32 @@ class MobiusGUI(ctk.CTk):
         except ImportError:
             self._log("TTS: pip install edge-tts")
 
+    def _on_copy(self) -> None:
+        """Skopiuj ostatnią odpowiedź MOBIUS do schowka."""
+        last = None
+        for m in reversed(self.messages):
+            if m.get("role") == "assistant":
+                last = m.get("content", "")
+                break
+        if not last:
+            self._log("Brak odpowiedzi do skopiowania.")
+            return
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(last)
+            self._log("Skopiowano do schowka.")
+        except Exception:
+            self._log("Błąd schowka.")
+
+    def _notify(self, title: str, msg: str) -> None:
+        """Powiadomienie Windows (toast). Opcjonalne — winotify."""
+        try:
+            from winotify import Notification
+            n = Notification(app_id="MOBIUS", title=title, msg=msg)
+            n.show()
+        except ImportError:
+            pass
+
     def _build_chat(self) -> None:
         chat_frame = ctk.CTkFrame(
             self.main,
@@ -642,7 +680,7 @@ class MobiusGUI(ctk.CTk):
 
         self.input_entry = ctk.CTkEntry(
             input_frame,
-            placeholder_text="Wpisz lub mów... (Enter = wyślij)",
+            placeholder_text="Wpisz lub mów... (Enter / Ctrl+Enter = wyślij)",
             font=ctk.CTkFont(family="Consolas", size=12),
             fg_color=self.colors["bg_card"],
             border_color=self.colors["border"],
@@ -650,6 +688,7 @@ class MobiusGUI(ctk.CTk):
         )
         self.input_entry.grid(row=0, column=0, sticky="ew", padx=(0, 4))
         self.input_entry.bind("<Return>", lambda e: self._on_send())
+        self.input_entry.bind("<Control-Return>", lambda e: self._on_send())
 
         self.mic_btn = ctk.CTkButton(
             input_frame,
@@ -945,6 +984,7 @@ class MobiusGUI(ctk.CTk):
                 self._log("Agent zakończony.")
                 self.send_btn.configure(state="normal")
                 self.mic_btn.configure(state="normal")
+                self._notify("MOBIUS", "Agent zakończony.")
 
             self.after(0, _done)
         except Exception as e:
@@ -1000,6 +1040,23 @@ class MobiusGUI(ctk.CTk):
                     self.after(0, _update)
 
                 response = "".join(full_response)
+
+                # Fallback: jeśli streaming nic nie zwrócił, spróbuj bez streamu
+                if not response:
+                    resp_text, _ = ollama_generate(
+                        self.ollama_base,
+                        self.model_var.get(),
+                        prompt,
+                        PONTIFEX_SYSTEM_PROMPT,
+                        timeout=self.ollama_timeout,
+                    )
+                    response = resp_text or response
+                    def _fallback_update() -> None:
+                        self.chat_text.configure(state="normal")
+                        self.chat_text.insert("end", response, "assistant")
+                        self.chat_text.see("end")
+                        self.chat_text.configure(state="disabled")
+                    self.after(0, _fallback_update)
                 elapsed = time.perf_counter() - start
 
                 def _done() -> None:
@@ -1010,6 +1067,7 @@ class MobiusGUI(ctk.CTk):
                     self._log(f"Odpowiedź: {elapsed:.2f}s")
                     self.send_btn.configure(state="normal")
                     self.mic_btn.configure(state="normal")
+                    self._notify("MOBIUS", "Odpowiedź gotowa.")
 
                 self.after(0, _done)
             except Exception as e:

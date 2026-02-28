@@ -41,13 +41,29 @@ def add_reminder(text: str, when: Optional[str] = None) -> str:
     return f"Dodano: {text}"
 
 
+def _is_due(when: str) -> bool:
+    """Czy przypomnienie jest już aktualne (when minęło lub puste)."""
+    if not when or not when.strip():
+        return True
+    try:
+        when_clean = when.strip().replace(" ", "T")
+        if "+" in when_clean or when_clean.endswith("Z"):
+            when_clean = when_clean.split("+")[0].rstrip().rstrip("Z").rstrip()
+        if "T" in when_clean and len(when_clean) > 10:
+            dt = datetime.fromisoformat(when_clean)
+            return datetime.now() >= dt
+        if len(when_clean) >= 10:
+            dt = datetime.strptime(when_clean[:10], "%Y-%m-%d")
+            return datetime.now().date() >= dt.date()
+        return True
+    except (ValueError, TypeError):
+        return True
+
+
 def get_due_reminders() -> list[str]:
-    """Zwróć listę przypomnień do wyświetlenia.
-    TODO: obecnie zwraca ostatnie 10 przypomnień bez sprawdzania when.
-    Docelowo: filtrować po dacie/czasie (when) — np. ISO datetime, 'za 1h', 'jutro'.
-    """
+    """Zwróć przypomnienia, których when już minął (lub puste = zawsze aktualne)."""
     reminders = load_reminders()
-    return [r["text"] for r in reminders[-10:] if r.get("text")]
+    return [r["text"] for r in reminders if r.get("text") and _is_due(r.get("when", ""))][-10:]
 
 
 def clear_reminder(reminder_id: int) -> bool:
