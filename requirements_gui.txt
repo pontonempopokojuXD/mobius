@@ -1,0 +1,19 @@
+# ─────────────────────────────────────────────────────────
+#  MOBIUS GUI — Lokalne Centrum Dowodzenia
+#  CustomTkinter | Ollama | Tytan Monitor | Agent | Voice
+# ─────────────────────────────────────────────────────────
+
+customtkinter>=5.2.0
+requests>=2.31.0
+psutil>=6.0.0
+pynvml>=11.5.0
+
+# Głos — TTS (edge-tts, Microsoft, darmowy)
+edge-tts>=6.1.0
+
+# Głos — STT (SpeechRecognition)
+# PyAudio wymaga portaudio; na Windows: pip install pipwin && pipwin install pyaudio
+SpeechRecognition>=3.10.0
+
+# RAG — baza wiedzy
+chromadb>=0.4.0

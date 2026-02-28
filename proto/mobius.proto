@@ -1,0 +1,118 @@
+syntax = "proto3";
+
+package mobius;
+
+// ─────────────────────────────────────────────
+//  MOBIUS Cross-Node Communication Protocol
+//  Node 1 (Linux/Sentinel) ↔ Node 2 (Windows/Titan)
+// ─────────────────────────────────────────────
+
+service TitanService {
+  // Single-shot inference (full response)
+  rpc Infer (InferRequest) returns (InferResponse);
+
+  // Streaming inference (token-by-token)
+  rpc InferStream (InferRequest) returns (stream InferChunk);
+
+  // Probe Titan availability and VRAM state
+  rpc HealthCheck (HealthRequest) returns (HealthResponse);
+
+  // Force immediate VRAM purge (emergency flush)
+  rpc PurgeVRAM (PurgeRequest) returns (PurgeResponse);
+
+  // Load model into VRAM explicitly (pre-warm)
+  rpc WarmUp (WarmUpRequest) returns (WarmUpResponse);
+}
+
+// ─── Inference ────────────────────────────────
+
+message InferRequest {
+  string prompt             = 1;  // Full prompt string
+  string model_id           = 2;  // HuggingFace model ID or local path
+  float  temperature        = 3;  // Sampling temperature (0.0–2.0)
+  float  top_p              = 4;  // Nucleus sampling probability
+  int32  max_new_tokens     = 5;  // Max tokens to generate
+  bool   use_system_prompt  = 6;  // Prepend system prompt
+  string system_prompt      = 7;  // Custom system prompt (optional)
+  bool   stream             = 8;  // Reserved for routing hints
+  repeated string stop_sequences = 9;  // Stop at these tokens
+  SamplingParams sampling   = 10; // Extended sampling config
+}
+
+message SamplingParams {
+  float  repetition_penalty = 1;
+  int32  top_k              = 2;
+  float  min_p              = 3;
+  bool   do_sample          = 4;
+}
+
+message InferResponse {
+  string text               = 1;  // Generated text
+  int32  tokens_generated   = 2;
+  int32  tokens_prompt      = 3;
+  float  inference_time_ms  = 4;
+  float  vram_used_mb       = 5;  // VRAM at end of inference (pre-purge)
+  bool   purged             = 6;  // Whether purge was executed
+  NodeStats stats           = 7;
+}
+
+message InferChunk {
+  string token              = 1;  // Single decoded token
+  int32  index              = 2;  // Token position
+  bool   done               = 3;  // True on final chunk
+  float  vram_used_mb       = 4;  // Only populated on final chunk
+}
+
+// ─── Health ───────────────────────────────────
+
+message HealthRequest {
+  bool include_vram_detail  = 1;
+}
+
+message HealthResponse {
+  bool   online             = 1;
+  bool   model_loaded       = 2;
+  float  vram_used_mb       = 3;
+  float  vram_total_mb      = 4;
+  float  vram_free_mb       = 5;
+  string gpu_name           = 6;
+  string model_id           = 7;  // Currently loaded model ("" if none)
+  string titan_version      = 8;
+  int64  uptime_seconds     = 9;
+}
+
+// ─── VRAM Purge ───────────────────────────────
+
+message PurgeRequest {
+  bool force_gc             = 1;  // Run gc.collect() on host RAM too
+}
+
+message PurgeResponse {
+  bool   success            = 1;
+  float  vram_before_mb     = 2;
+  float  vram_after_mb      = 3;
+  float  freed_mb           = 4;
+}
+
+// ─── Warm Up ──────────────────────────────────
+
+message WarmUpRequest {
+  string model_id           = 1;
+  bool   use_flash_attn     = 2;
+  bool   use_4bit           = 3;
+}
+
+message WarmUpResponse {
+  bool   success            = 1;
+  float  load_time_ms       = 2;
+  float  vram_used_mb       = 3;
+  string error              = 4;
+}
+
+// ─── Shared ───────────────────────────────────
+
+message NodeStats {
+  float  cpu_percent        = 1;
+  float  ram_used_mb        = 2;
+  float  gpu_util_percent   = 3;
+}

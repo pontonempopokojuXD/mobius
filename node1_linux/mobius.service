@@ -1,0 +1,74 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  MOBIUS Sentinel — systemd unit (Ubuntu Server 24.04 LTS)
+#
+#  Install:
+#    sudo cp mobius.service /etc/systemd/system/mobius.service
+#    sudo systemctl daemon-reload
+#    sudo systemctl enable mobius
+#    sudo systemctl start mobius
+#
+#  Logs:
+#    sudo journalctl -u mobius -f
+# ─────────────────────────────────────────────────────────────────────────────
+
+[Unit]
+Description=MOBIUS Sentinel Node — Distributed AI Master
+Documentation=https://github.com/yourrepo/mobius
+After=network-online.target ollama.service
+Wants=network-online.target
+# Start after Ollama if it is managed by systemd on this machine
+# Remove the ollama.service dependency if Ollama is not installed here
+
+[Service]
+Type=simple
+
+# ── Run as a dedicated user for security ─────────────────────────────────────
+# Create with: sudo useradd -r -s /bin/false -d /opt/mobius mobius
+User=mobius
+Group=mobius
+
+# ── Working directory (adjust to your deploy path) ───────────────────────────
+WorkingDirectory=/opt/mobius
+
+# ── Python virtualenv ─────────────────────────────────────────────────────────
+ExecStart=/opt/mobius/venv/bin/python \
+    /opt/mobius/node1_linux/sentinel_node.py \
+    --mode text
+
+# ── Environment ───────────────────────────────────────────────────────────────
+# Override these in /etc/systemd/system/mobius.service.d/override.conf
+# or via:  sudo systemctl edit mobius
+Environment="TITAN_HOST=192.168.1.249"
+Environment="TITAN_PORT=50051"
+Environment="OLLAMA_HOST=http://localhost:11434"
+Environment="OLLAMA_MODEL=llama3.2:1b"
+Environment="WHISPER_MODEL=base.en"
+Environment="MOBIUS_MODE=text"
+Environment="PYTHONUNBUFFERED=1"
+
+# ── Restart policy ────────────────────────────────────────────────────────────
+Restart=on-failure
+RestartSec=5s
+StartLimitIntervalSec=60s
+StartLimitBurst=5
+
+# ── Resource limits ───────────────────────────────────────────────────────────
+# Prevent runaway CPU usage from Whisper/VAD
+CPUQuota=85%
+MemoryMax=4G
+MemorySwapMax=0
+
+# ── Hardening ─────────────────────────────────────────────────────────────────
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/opt/mobius /tmp
+
+# ── Stdout/Stderr → journald ──────────────────────────────────────────────────
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mobius
+
+[Install]
+WantedBy=multi-user.target

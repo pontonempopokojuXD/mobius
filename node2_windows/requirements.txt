@@ -1,0 +1,62 @@
+# ─────────────────────────────────────────────────────────
+#  MOBIUS – Node 2 (Windows 11 / RTX 5060 Ti)
+#  Python 3.11+  |  CUDA 12.4+  |  Driver >= 550.x
+# ─────────────────────────────────────────────────────────
+
+# ── Step 1: PyTorch CUDA 12.4 ────────────────────────────────────────────────
+# Run this FIRST, separately — do NOT use pip install from this file for torch:
+#
+#   pip install torch torchvision torchaudio \
+#     --index-url https://download.pytorch.org/whl/cu124
+#
+# Minimum required: torch>=2.4.0+cu124
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Step 2: BitsAndBytes (Windows CUDA wheel) ─────────────────────────────────
+# Run separately:
+#
+#   pip install bitsandbytes --prefer-binary \
+#     --extra-index-url https://jllllll.github.io/bitsandbytes-windows-webui
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Step 3: FlashAttention-3 (Windows pre-built wheel) ───────────────────────
+# Download the matching wheel (Python version + CUDA version) from:
+#   https://github.com/bdashore3/flash-attention/releases
+#
+#   pip install flash_attn-*.whl
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Step 4: Triton for Windows ────────────────────────────────────────────────
+# Option A (official, may lag behind):
+#   pip install triton
+#
+# Option B (community Windows build, recommended for CUDA 12.x):
+#   https://github.com/woct0rdho/triton-windows/releases
+#   pip install triton_windows-3.x.x-*.whl
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Step 5: pip install -r requirements.txt ───────────────────────────────────
+
+# HuggingFace stack
+transformers>=4.44.0
+accelerate>=0.34.0
+huggingface_hub>=0.25.0
+tokenizers>=0.20.0
+safetensors>=0.4.5
+
+# gRPC
+grpcio>=1.67.0
+grpcio-tools>=1.67.0
+protobuf>=5.28.0
+
+# GPU monitoring (pynvml for VRAM stats, GPU util)
+pynvml>=11.5.0
+
+# System metrics
+psutil>=6.0.0
+
+# NumPy
+numpy>=1.26.0

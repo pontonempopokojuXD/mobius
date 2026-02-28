@@ -1,0 +1,24 @@
+{
+  "ollama": {
+    "host": "http://localhost:11434",
+    "timeout_seconds": 90,
+    "default_models": ["llama3.2:1b", "llama3.2:3b", "llama3:8b"],
+    "fetch_models_from_api": true
+  },
+  "gui": {
+    "window_width": 1280,
+    "window_height": 800,
+    "hardware_refresh_interval_ms": 2000,
+    "connection_check_interval_ms": 10000,
+    "max_context_messages": 12
+  },
+  "alerts": {
+    "cpu_threshold_percent": 90,
+    "gpu_temp_threshold_c": 85,
+    "ram_threshold_percent": 95
+  },
+  "memory": {
+    "max_messages_stored": 500,
+    "auto_save_interval_seconds": 30
+  }
+}
