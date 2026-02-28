@@ -732,16 +732,18 @@ class MobiusGUI(ctk.CTk):
                 self.chat_text.insert("end", f"MOBIUS: {content}\n\n", "assistant")
         self.chat_text.configure(state="disabled")
 
-    def _append_message(self, role: str, content: str) -> None:
+    def _append_message(self, role: str, content: str, *, update_chat: bool = True) -> None:
+        """Dodaj wiadomość do historii. Przy update_chat=False tylko zapis do messages (np. po streamie)."""
         self.messages.append({"role": role, "content": content})
         save_memory(self.messages)
-        self.chat_text.configure(state="normal")
-        if role == "user":
-            self.chat_text.insert("end", f">> {content}\n\n", "user")
-        else:
-            self.chat_text.insert("end", f"MOBIUS: {content}\n\n", "assistant")
-        self.chat_text.see("end")
-        self.chat_text.configure(state="disabled")
+        if update_chat:
+            self.chat_text.configure(state="normal")
+            if role == "user":
+                self.chat_text.insert("end", f">> {content}\n\n", "user")
+            else:
+                self.chat_text.insert("end", f"MOBIUS: {content}\n\n", "assistant")
+            self.chat_text.see("end")
+            self.chat_text.configure(state="disabled")
 
     def _show_reminders_on_start(self) -> None:
         """Wyświetl przypomnienia przy starcie."""
@@ -888,7 +890,6 @@ class MobiusGUI(ctk.CTk):
                 f"{'Użytkownik' if m['role']=='user' else 'MOBIUS'}: {m['content']}"
                 for m in history
             ]
-            prompt_lines.append(f"Użytkownik: {text}")
             prompt_lines.append("MOBIUS:")
             prompt = "\n".join(prompt_lines)
 
@@ -1000,8 +1001,7 @@ class MobiusGUI(ctk.CTk):
                 elapsed = time.perf_counter() - start
 
                 def _done() -> None:
-                    self.messages.append({"role": "assistant", "content": response})
-                    save_memory(self.messages)
+                    self._append_message("assistant", response, update_chat=False)
                     self.chat_text.configure(state="normal")
                     self.chat_text.insert("end", "\n\n", "assistant")
                     self.chat_text.configure(state="disabled")

@@ -31,14 +31,15 @@ def titan_available(host: str, port: int, timeout: float = 3) -> bool:
     """Sprawdź dostępność Titan."""
     if not GRPC_AVAILABLE:
         return False
+    channel = grpc.insecure_channel(f"{host}:{port}")
     try:
-        channel = grpc.insecure_channel(f"{host}:{port}")
         stub = mobius_pb2_grpc.TitanServiceStub(channel)
         stub.HealthCheck(mobius_pb2.HealthRequest(include_vram_detail=True), timeout=timeout)
-        channel.close()
         return True
     except Exception:
         return False
+    finally:
+        channel.close()
 
 
 def titan_infer(
@@ -54,8 +55,8 @@ def titan_infer(
     """Inferencja blocking. Zwraca (text, elapsed_ms)."""
     if not GRPC_AVAILABLE:
         return "[gRPC niedostępny: pip install grpcio]", 0.0
+    channel = grpc.insecure_channel(f"{host}:{port}")
     try:
-        channel = grpc.insecure_channel(f"{host}:{port}")
         stub = mobius_pb2_grpc.TitanServiceStub(channel)
         req = mobius_pb2.InferRequest(
             prompt=prompt,
@@ -72,12 +73,13 @@ def titan_infer(
             ),
         )
         resp = stub.Infer(req, timeout=timeout)
-        channel.close()
         return resp.text.strip(), resp.inference_time_ms
     except grpc.RpcError as e:
         return f"[Titan: {e.code()} {e.details()}]", 0.0
     except Exception as e:
         return f"[Titan: {e}]", 0.0
+    finally:
+        channel.close()
 
 
 def titan_infer_stream(
@@ -94,8 +96,8 @@ def titan_infer_stream(
     if not GRPC_AVAILABLE:
         yield "[gRPC niedostępny]", True
         return
+    channel = grpc.insecure_channel(f"{host}:{port}")
     try:
-        channel = grpc.insecure_channel(f"{host}:{port}")
         stub = mobius_pb2_grpc.TitanServiceStub(channel)
         req = mobius_pb2.InferRequest(
             prompt=prompt,
@@ -117,6 +119,7 @@ def titan_infer_stream(
                 yield chunk.token, chunk.done
             if chunk.done:
                 break
-        channel.close()
     except Exception as e:
         yield f"[Titan: {e}]", True
+    finally:
+        channel.close()

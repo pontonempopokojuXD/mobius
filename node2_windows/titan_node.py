@@ -420,7 +420,7 @@ class TitanServicer(mobius_pb2_grpc.TitanServiceServicer):
                 top_k              = sampling.top_k or 50,
                 repetition_penalty = sampling.repetition_penalty or 1.1,
                 min_p              = sampling.min_p or 0.0,
-                do_sample          = sampling.do_sample if sampling.HasField("do_sample") else True,
+                do_sample          = getattr(sampling, "do_sample", True),
                 stop_sequences     = list(request.stop_sequences) or None,
             )
         except Exception as exc:

@@ -5,6 +5,7 @@ ChromaDB + embeddingi do semantycznego wyszukiwania.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Optional
 
@@ -50,7 +51,8 @@ def rag_add(text: str, metadata: Optional[dict] = None) -> bool:
         if _embedding_fn:
             kwargs["embedding_function"] = _embedding_fn
         coll = client.get_or_create_collection("mobius_knowledge", **kwargs)
-        coll.add(documents=[text], ids=[f"doc_{hash(text) % 10**10}"], metadatas=[metadata or {}])
+        doc_id = f"doc_{hashlib.sha256(text.encode('utf-8')).hexdigest()[:16]}"
+        coll.add(documents=[text], ids=[doc_id], metadatas=[metadata or {}])
         return True
     except Exception:
         return False
