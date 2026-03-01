@@ -8,6 +8,7 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Callable, Optional
 
 MOBIUS_ROOT = Path(__file__).resolve().parent
 USER_PROFILE_FILE = MOBIUS_ROOT / "user_profile.json"
@@ -58,28 +59,69 @@ def get_profile_prompt() -> str:
     return "\n".join(lines)
 
 
-def update_profile_from_response(response: str, current_profile: dict) -> dict:
-    profile = {**current_profile}
-    text_lower = response.lower()
+def _extract_llm(response: str, generate_fn: Callable[[str, str], str]) -> Optional[dict]:
+    """Wyciągnij fakty z odpowiedzi przez LLM. Zwraca None przy błędzie."""
+    prompt = (
+        "Z poniższego tekstu wyciągnij TYLKO fakty o użytkowniku w formacie JSON.\n"
+        'Pola: name (str|null), new_facts (list[str]), new_preferences (list[str]).\n'
+        'Jeśli nic nie ma — zwróć {"name": null, "new_facts": [], "new_preferences": []}.\n'
+        f"Tekst: {response[:500]}"
+    )
+    try:
+        raw = generate_fn(prompt, "Odpowiedz tylko czystym JSON, bez markdown.")
+        raw = re.sub(r"```(?:json)?\s*|\s*```", "", raw).strip()
+        data = json.loads(raw)
+        return {
+            "name": data.get("name"),
+            "new_facts": data.get("new_facts", []),
+            "new_preferences": data.get("new_preferences", []),
+        }
+    except Exception:
+        return None
 
+
+def _extract_regex(response: str) -> dict:
+    """Fallback regex extraction."""
+    text_lower = response.lower()
+    name: Optional[str] = None
     name_match = re.search(
         r"(?:nazywam się|jestem)\s+([A-ZŁÓŚŻŹĆŃĘĄ][a-zA-ZłóśżźćńęąĄŁÓŚŻŹĆŃÉ]+)",
         response,
     )
     if name_match:
-        profile["name"] = name_match.group(1)
+        name = name_match.group(1)
+    prefs = re.findall(r"(?:lubię|preferuję)\s+([^,.!?\n]{2,40})", text_lower)
+    facts = re.findall(r"(?:mam|pracuję jako)\s+([^,.!?\n]{2,40})", text_lower)
+    return {
+        "name": name,
+        "new_facts": [f.strip() for f in facts],
+        "new_preferences": [p.strip() for p in prefs],
+    }
 
-    pref_matches = re.findall(r"(?:lubię|preferuję)\s+([^,.!?\n]{2,40})", text_lower)
+
+def update_profile_from_response(
+    response: str,
+    current_profile: dict,
+    generate_fn: Optional[Callable[[str, str], str]] = None,
+) -> dict:
+    profile = {**current_profile}
+
+    extracted = _extract_llm(response, generate_fn) if generate_fn else None
+    if extracted is None:
+        extracted = _extract_regex(response)
+
+    if extracted.get("name"):
+        profile["name"] = extracted["name"]
+
     prefs: list[str] = list(profile.get("preferences", []))
-    for p in pref_matches:
+    for p in extracted.get("new_preferences", []):
         p = p.strip()
         if p and p not in prefs:
             prefs.append(p)
     profile["preferences"] = prefs[:20]
 
-    fact_matches = re.findall(r"(?:mam|pracuję jako)\s+([^,.!?\n]{2,40})", text_lower)
     facts: list[str] = list(profile.get("facts", []))
-    for f in fact_matches:
+    for f in extracted.get("new_facts", []):
         f = f.strip()
         if f and f not in facts:
             facts.append(f)

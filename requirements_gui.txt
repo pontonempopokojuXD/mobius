@@ -34,3 +34,10 @@ duckduckgo-search>=6.0.0
 
 # Vision / screenshots (agent tool)
 Pillow>=10.0.0
+
+# Naturalny parsing dat (przypomnienia)
+dateparser>=1.1.8
+
+# System integration (aktywne okno, schowek)
+pygetwindow>=0.0.9
+pyperclip>=1.8.2

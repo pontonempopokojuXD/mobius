@@ -150,6 +150,64 @@ def tool_rag_add_file(path: str) -> str:
         return "RAG niedostępny: pip install chromadb"
 
 
+def tool_add_background_task(description: str, shell_command: str) -> str:
+    """Uruchom polecenie shell jako zadanie w tle."""
+    try:
+        from mobius_tasks import get_task_queue
+
+        def _run() -> str:
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", shell_command],
+                capture_output=True, text=True, timeout=300, cwd=str(MOBIUS_ROOT),
+            )
+            return (result.stdout + result.stderr).strip()
+
+        tid = get_task_queue().add_task(description, _run)
+        return f"Zadanie '{description}' uruchomione w tle. ID: {tid}"
+    except Exception as e:
+        return f"[Błąd: {e}]"
+
+
+def tool_get_task_status(task_id: str) -> str:
+    """Sprawdź status zadania w tle."""
+    try:
+        from mobius_tasks import get_task_queue
+        t = get_task_queue().get_status(task_id)
+        if not t:
+            return f"Zadanie {task_id} nie znalezione."
+        return json.dumps(t, ensure_ascii=False)
+    except Exception as e:
+        return f"[Błąd: {e}]"
+
+
+def tool_get_active_window() -> str:
+    """Zwróć tytuł aktualnie aktywnego okna."""
+    try:
+        from mobius_system import get_active_window
+        w = get_active_window()
+        return w["title"] if w else "Brak danych."
+    except ImportError:
+        return "[mobius_system niedostępny]"
+
+
+def tool_get_clipboard() -> str:
+    """Zwróć zawartość schowka."""
+    try:
+        from mobius_system import get_clipboard
+        return get_clipboard() or "(pusty schowek)"
+    except ImportError:
+        return "[mobius_system niedostępny]"
+
+
+def tool_set_clipboard(text: str) -> str:
+    """Ustaw zawartość schowka."""
+    try:
+        from mobius_system import set_clipboard
+        return "Schowek ustawiony." if set_clipboard(text) else "Błąd ustawiania schowka."
+    except ImportError:
+        return "[mobius_system niedostępny]"
+
+
 def tool_web_search(query: str, n: str = "5") -> str:
     """Wyszukaj w internecie przez DuckDuckGo."""
     try:
@@ -215,6 +273,11 @@ TOOLS: dict[str, Callable[..., str]] = {
     "rag_add_file": lambda path: tool_rag_add_file(path),
     "web_search": lambda q, n="5": tool_web_search(q, n),
     "take_screenshot": lambda desc="": tool_take_screenshot(desc),
+    "add_background_task": lambda desc, cmd: tool_add_background_task(desc, cmd),
+    "get_task_status": lambda tid: tool_get_task_status(tid),
+    "get_active_window": lambda: tool_get_active_window(),
+    "get_clipboard": lambda: tool_get_clipboard(),
+    "set_clipboard": lambda text: tool_set_clipboard(text),
 }
 
 
@@ -266,6 +329,11 @@ _TOOL_SIGS: dict[str, str] = {
     "rag_add_file": "rag_add_file(path)",
     "web_search": "web_search(query, n)",
     "take_screenshot": "take_screenshot(description)",
+    "add_background_task": "add_background_task(description, shell_command)",
+    "get_task_status": "get_task_status(task_id)",
+    "get_active_window": "get_active_window()",
+    "get_clipboard": "get_clipboard()",
+    "set_clipboard": "set_clipboard(text)",
 }
 
 

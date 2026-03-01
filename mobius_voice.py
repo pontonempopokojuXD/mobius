@@ -1,7 +1,7 @@
 """
 MOBIUS Voice — STT (Speech-to-Text) + TTS (Text-to-Speech)
 STT: faster-whisper (lokalny, offline) + sounddevice
-TTS: edge-tts (Microsoft, darmowy, dobra polszczyzna)
+TTS: edge-tts z barge-in (przerwanie przez stop_tts())
 """
 
 from __future__ import annotations
@@ -9,6 +9,8 @@ from __future__ import annotations
 import asyncio
 import subprocess
 import tempfile
+import threading
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -34,7 +36,8 @@ try:
 except ImportError:
     pass
 
-_whisper_model: Optional[Any] = None  # type: ignore[name-defined]
+_whisper_model: Optional[Any] = None
+_tts_stop_event = threading.Event()
 
 
 def _get_whisper_model() -> Optional[Any]:
@@ -48,15 +51,17 @@ def _get_whisper_model() -> Optional[Any]:
     return _whisper_model
 
 
+def stop_tts() -> None:
+    """Przerwij aktualnie odtwarzany TTS."""
+    _tts_stop_event.set()
+
+
 def tts_speak(text: str, voice: str = "pl-PL-ZofiaNeural", blocking: bool = True) -> bool:
-    """
-    Odtwórz tekst przez edge-tts.
-    voice: pl-PL-ZofiaNeural (żeński), pl-PL-MarekNeural (męski)
-    """
     if not TTS_AVAILABLE or not text.strip():
         return False
+    _tts_stop_event.clear()
     try:
-        async def _run() -> str:
+        async def _synthesize() -> str:
             communicate = edge_tts.Communicate(text, voice)
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
                 mp3_path = f.name
@@ -66,16 +71,19 @@ def tts_speak(text: str, voice: str = "pl-PL-ZofiaNeural", blocking: bool = True
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            mp3_path = loop.run_until_complete(_run())
+            mp3_path = loop.run_until_complete(_synthesize())
+            proc = subprocess.Popen(
+                ["cmd", "/c", "start", "/wait", "", mp3_path],
+                shell=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
             if blocking:
-                subprocess.run(
-                    ["cmd", "/c", "start", "/wait", "", mp3_path],
-                    shell=True,
-                    timeout=120,
-                    capture_output=True,
-                )
-            else:
-                subprocess.Popen(["cmd", "/c", "start", "", mp3_path], shell=True)
+                while proc.poll() is None:
+                    if _tts_stop_event.is_set():
+                        proc.terminate()
+                        break
+                    time.sleep(0.5)
             Path(mp3_path).unlink(missing_ok=True)
             return True
         finally:
@@ -96,9 +104,9 @@ def stt_listen(timeout: float = 5, phrase_time_limit: float = 10) -> Optional[st
         return None
     try:
         sample_rate = 16000
-        chunk_size = int(sample_rate * 0.1)  # 100ms chunks
+        chunk_size = int(sample_rate * 0.1)
         silence_threshold = 100
-        silence_limit = int(timeout / 0.1)   # liczba cichych chunków = timeout
+        silence_limit = int(timeout / 0.1)
 
         frames: list[Any] = []
         silent_chunks = 0

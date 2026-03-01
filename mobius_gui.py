@@ -50,7 +50,7 @@ except ImportError:
     def get_profile_prompt() -> str:  # type: ignore[misc]
         return ""
 
-    def update_profile_from_response(r: str, p: dict) -> dict:  # type: ignore[misc]
+    def update_profile_from_response(r: str, p: dict, generate_fn=None) -> dict:  # type: ignore[misc]
         return p
 
 try:
@@ -64,6 +64,12 @@ try:
 except ImportError:
     _WAKEWORD_AVAILABLE = False
     WakeWordListener = None  # type: ignore[assignment,misc]
+
+try:
+    from mobius_events import get_bus, HARDWARE_ALERT, REMINDER_DUE, WAKE_WORD_DETECTED, TASK_COMPLETED
+    _EVENTS_AVAILABLE = True
+except ImportError:
+    _EVENTS_AVAILABLE = False
 
 # pynvml — opcjonalny (RTX 5060 Ti), singleton handle
 try:
@@ -123,10 +129,13 @@ DEFAULTS = {
     "tts_voice": "pl-PL-ZofiaNeural",
     "memory_auto_index": True,
     "memory_recall_n": 3,
+    "memory_auto_save_interval": 30,
     "daemon_enabled": True,
     "daemon_interval_seconds": 60,
     "daemon_cpu_sustained_checks": 3,
     "profile_auto_update": True,
+    "agent_system_context": False,
+    "wakeword_vad_threshold": 0.01,
 }
 
 PONTIFEX_SYSTEM_PROMPT = """Jesteś Pontifex Rex — główny architekt systemu MOBIUS.
@@ -187,10 +196,13 @@ def _load_config() -> dict:
             "tts_voice": data.get("voice", {}).get("tts_voice", "pl-PL-ZofiaNeural"),
             "memory_auto_index": memory.get("auto_index_on_close", True),
             "memory_recall_n": int(memory.get("recall_n_results", 3)),
+            "memory_auto_save_interval": int(memory.get("auto_save_interval_seconds", 30)),
             "daemon_enabled": daemon_cfg.get("enabled", True),
             "daemon_interval_seconds": int(daemon_cfg.get("check_interval_seconds", 60)),
             "daemon_cpu_sustained_checks": int(daemon_cfg.get("cpu_sustained_checks", 3)),
             "profile_auto_update": profile_cfg.get("auto_update", True),
+            "agent_system_context": data.get("agent_system_context", False),
+            "wakeword_vad_threshold": float(data.get("wakeword_vad_threshold", 0.01)),
         }
     except Exception as e:
         log.warning("Nie można wczytać config: %s", e)
@@ -468,12 +480,10 @@ class MobiusGUI(ctk.CTk):
         self._alert_fired: set[str] = set()
         self._daemon: Optional[Any] = None
         if _DAEMON_AVAILABLE and self.config.get("daemon_enabled", True):
-            self._daemon = ProactiveDaemon(
-                lambda m: self.after(0, lambda msg=m: self._log(msg)),
-                self.config,
-            )
+            self._daemon = ProactiveDaemon(self.config)
         self._wake_listener: Optional[Any] = None
         self._wake_active = ctk.BooleanVar(value=False)
+        self._subscribe_events()
         self._build_ui()
         self._start_monitors()
 
@@ -639,6 +649,18 @@ class MobiusGUI(ctk.CTk):
         )
         self.tts_btn.pack(padx=16, pady=(0, 4))
 
+        self.stop_tts_btn = ctk.CTkButton(
+            self.sidebar,
+            text="⏹ Stop TTS",
+            width=200,
+            height=28,
+            fg_color=self.colors["bg_card"],
+            hover_color=self.colors["error"],
+            text_color=self.colors["text_dim"],
+            command=self._on_stop_tts,
+        )
+        self.stop_tts_btn.pack(padx=16, pady=(0, 4))
+
         self.copy_btn = ctk.CTkButton(
             self.sidebar,
             text="📋 Kopiuj",
@@ -669,9 +691,7 @@ class MobiusGUI(ctk.CTk):
                 self._log("👂 Wake word: pip install faster-whisper sounddevice")
                 self._wake_active.set(False)
                 return
-            self._wake_listener = WakeWordListener(
-                callback=self._on_wake_triggered, config=self.config
-            )
+            self._wake_listener = WakeWordListener(config=self.config)
             self._wake_listener.start()
             self._log("👂 Wake word aktywny — powiedz 'Mobius'")
         else:
@@ -693,6 +713,17 @@ class MobiusGUI(ctk.CTk):
         from mobius_settings import SettingsDialog
         d = SettingsDialog(self, self.colors, on_save=self._reload_config)
         d.focus()
+
+    def _subscribe_events(self) -> None:
+        if not _EVENTS_AVAILABLE:
+            return
+        bus = get_bus()
+        bus.subscribe(HARDWARE_ALERT, lambda d: self.after(0, lambda msg=d: self._log(str(msg))))
+        bus.subscribe(REMINDER_DUE, lambda d: self.after(0, lambda msg=d: self._log(f"⏰ {msg}")))
+        bus.subscribe(WAKE_WORD_DETECTED, lambda _: self.after(0, self._on_wake_triggered))
+        bus.subscribe(TASK_COMPLETED, lambda d: self.after(
+            0, lambda data=d: self._log(f"✅ Zadanie: {data.get('name', '?')} — gotowe")
+        ))
 
     def _reload_config(self) -> None:
         self.config = _load_config()
@@ -781,6 +812,28 @@ class MobiusGUI(ctk.CTk):
         except ImportError:
             self._log("TTS: pip install edge-tts")
 
+    def _profile_generate_fn(self):
+        """Zwraca generate_fn dla LLM-based profile extraction (tylko Ollama, krótki timeout)."""
+        if self.backend_var.get() == "Titan":
+            return None
+        model = self.model_var.get()
+        if not model:
+            return None
+        def _gen(prompt: str, system: str) -> str:
+            resp, _ = ollama_generate(
+                self.ollama_base, model, prompt, system,
+                timeout=20, temperature=0.1, num_predict=200,
+            )
+            return resp
+        return _gen
+
+    def _on_stop_tts(self) -> None:
+        try:
+            from mobius_voice import stop_tts
+            stop_tts()
+        except ImportError:
+            pass
+
     def _on_copy(self) -> None:
         """Skopiuj ostatnią odpowiedź MOBIUS do schowka."""
         last = None
@@ -799,12 +852,24 @@ class MobiusGUI(ctk.CTk):
             self._log("Błąd schowka.")
 
     def _get_system_prompt(self) -> str:
-        """System prompt — nadpisany lub domyślny, z profilem użytkownika."""
+        """System prompt — nadpisany lub domyślny, z profilem i kontekstem systemowym."""
         override = self.config.get("system_prompt_override", "").strip()
         base = override if override else PONTIFEX_SYSTEM_PROMPT
         profile_ctx = get_profile_prompt()
         if profile_ctx:
-            return base + "\n\n" + profile_ctx
+            base = base + "\n\n" + profile_ctx
+        if self.config.get("agent_system_context", False):
+            try:
+                from mobius_system import get_system_context
+                ctx = get_system_context()
+                parts = [f"## Kontekst systemowy", f"Czas: {ctx['time']}, {ctx['day']}"]
+                if ctx.get("active_window"):
+                    parts.append(f"Aktywne okno: {ctx['active_window'].get('title', '?')}")
+                if ctx.get("running_apps"):
+                    parts.append(f"Uruchomione aplikacje: {', '.join(ctx['running_apps'][:10])}")
+                base = base + "\n\n" + "\n".join(parts)
+            except Exception:
+                pass
         return base
 
     def _notify(self, title: str, msg: str) -> None:
@@ -1050,10 +1115,21 @@ class MobiusGUI(ctk.CTk):
 
         self.after(15000, _conn_tick)
 
+        def _autosave_tick() -> None:
+            save_memory(self.messages)
+            self.after(self.config.get("memory_auto_save_interval", 30) * 1000, _autosave_tick)
+
+        self.after(30_000, _autosave_tick)
+
         if self._daemon:
             self._daemon.start()
 
     def _on_mic(self) -> None:
+        try:
+            from mobius_voice import stop_tts
+            stop_tts()
+        except ImportError:
+            pass
         try:
             from mobius_voice import stt_listen, STT_AVAILABLE
             if not STT_AVAILABLE:
@@ -1088,6 +1164,12 @@ class MobiusGUI(ctk.CTk):
             self._log("Wybierz model z listy.")
             return
 
+        try:
+            from mobius_voice import stop_tts
+            stop_tts()
+        except ImportError:
+            pass
+
         use_agent = self.agent_var.get()
         self.input_entry.delete(0, "end")
         self.send_btn.configure(state="disabled")
@@ -1097,7 +1179,11 @@ class MobiusGUI(ctk.CTk):
         self._log(f"Wysyłanie → {model}" + (" [Agent]" if use_agent else "") + "...")
 
         def _infer() -> None:
-            history = self.messages[-self.max_context :]
+            try:
+                from mobius_context import build_context
+                history = build_context(self.messages, text)
+            except ImportError:
+                history = self.messages[-self.max_context :]
             prompt_lines = [
                 f"{'Użytkownik' if m['role']=='user' else 'MOBIUS'}: {m['content']}"
                 for m in history
@@ -1168,7 +1254,9 @@ class MobiusGUI(ctk.CTk):
                 self.mic_btn.configure(state="normal")
                 self._notify("MOBIUS", "Agent zakończony.")
                 if self.config.get("profile_auto_update", True) and response:
-                    updated = update_profile_from_response(response, self.profile)
+                    updated = update_profile_from_response(
+                        response, self.profile, self._profile_generate_fn()
+                    )
                     if updated != self.profile:
                         self.profile = updated
                         save_profile(self.profile)
@@ -1266,7 +1354,9 @@ class MobiusGUI(ctk.CTk):
                     self.mic_btn.configure(state="normal")
                     self._notify("MOBIUS", "Odpowiedź gotowa.")
                     if self.config.get("profile_auto_update", True) and response:
-                        updated = update_profile_from_response(response, self.profile)
+                        updated = update_profile_from_response(
+                            response, self.profile, self._profile_generate_fn()
+                        )
                         if updated != self.profile:
                             self.profile = updated
                             save_profile(self.profile)

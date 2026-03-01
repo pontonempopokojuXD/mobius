@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Callable
 
 try:
     import psutil
@@ -18,8 +17,7 @@ log = logging.getLogger("mobius_daemon")
 
 
 class ProactiveDaemon:
-    def __init__(self, gui_callback: Callable[[str], None], config: dict) -> None:
-        self._callback = gui_callback
+    def __init__(self, config: dict) -> None:
         self._config = config
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -33,6 +31,13 @@ class ProactiveDaemon:
 
     def stop(self) -> None:
         self._stop.set()
+
+    def _publish(self, event_type: str, data: object) -> None:
+        try:
+            from mobius_events import get_bus
+            get_bus().publish(event_type, data)
+        except ImportError:
+            pass
 
     def _run(self) -> None:
         interval = self._config.get("daemon_interval_seconds", 60)
@@ -49,6 +54,7 @@ class ProactiveDaemon:
 
     def _check_reminders(self) -> None:
         try:
+            from mobius_events import REMINDER_DUE
             from mobius_reminders import get_due_reminders, load_reminders, save_reminders
             due = get_due_reminders()
             if not due:
@@ -56,7 +62,7 @@ class ProactiveDaemon:
             all_reminders = load_reminders()
             fired: set[str] = set()
             for text in due:
-                self._callback(f"⏰ {text}")
+                self._publish(REMINDER_DUE, text)
                 fired.add(text)
             all_reminders = [r for r in all_reminders if r.get("text") not in fired]
             save_reminders(all_reminders)
@@ -67,13 +73,14 @@ class ProactiveDaemon:
         if not _PSUTIL_AVAILABLE:
             return
         try:
+            from mobius_events import HARDWARE_ALERT
             cpu = psutil.cpu_percent(interval=0.1)
             ram = psutil.virtual_memory().percent
 
             if cpu > cpu_th:
                 self._cpu_high_count += 1
                 if self._cpu_high_count >= cpu_sustained:
-                    self._callback(f"⚠️ CPU wysoki od 3 minut: {cpu:.0f}%")
+                    self._publish(HARDWARE_ALERT, f"⚠️ CPU wysoki od 3 minut: {cpu:.0f}%")
                     self._cpu_high_count = 0
             else:
                 self._cpu_high_count = 0
@@ -81,7 +88,7 @@ class ProactiveDaemon:
             if ram > ram_th:
                 self._ram_high_count += 1
                 if self._ram_high_count >= cpu_sustained:
-                    self._callback(f"⚠️ RAM wysoki od 3 minut: {ram:.0f}%")
+                    self._publish(HARDWARE_ALERT, f"⚠️ RAM wysoki od 3 minut: {ram:.0f}%")
                     self._ram_high_count = 0
             else:
                 self._ram_high_count = 0

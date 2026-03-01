@@ -52,5 +52,7 @@
   },
   "profile": {
     "auto_update": true
-  }
+  },
+  "agent_system_context": false,
+  "wakeword_vad_threshold": 0.01
 }
