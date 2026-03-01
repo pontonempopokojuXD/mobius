@@ -77,16 +77,16 @@ class ProactiveDaemon:
     def _check_reminders(self) -> None:
         try:
             from mobius_events import REMINDER_DUE
-            from mobius_reminders import get_due_reminders, load_reminders, save_reminders
-            due = get_due_reminders()
-            if not due:
+            from mobius_reminders import _get_due_reminder_ids, load_reminders, save_reminders
+            due_ids = _get_due_reminder_ids()
+            if not due_ids:
                 return
             all_reminders = load_reminders()
-            fired: set[str] = set()
-            for text in due:
+            fired_ids: set[int] = set()
+            for rid, text in due_ids:
                 self._publish(REMINDER_DUE, text)
-                fired.add(text)
-            all_reminders = [r for r in all_reminders if r.get("text") not in fired]
+                fired_ids.add(rid)
+            all_reminders = [r for r in all_reminders if r.get("id") not in fired_ids]
             save_reminders(all_reminders)
         except Exception as e:
             log.warning("Reminder check error: %s", e)

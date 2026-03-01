@@ -41,17 +41,36 @@ def _get_client():
     return _client
 
 
-def rag_add(text: str, metadata: Optional[dict] = None) -> bool:
-    """Dodaj fragment do bazy wiedzy."""
+def _get_collection(name: str):
     client = _get_client()
     if not client:
+        return None
+    kwargs = {"metadata": {"hnsw:space": "cosine"}}
+    if _embedding_fn:
+        kwargs["embedding_function"] = _embedding_fn
+    return client.get_or_create_collection(name, **kwargs)
+
+
+def rag_add(text: str, metadata: Optional[dict] = None) -> bool:
+    """Dodaj fragment do bazy wiedzy."""
+    coll = _get_collection("mobius_knowledge")
+    if not coll:
         return False
     try:
-        kwargs = {"metadata": {"hnsw:space": "cosine"}}
-        if _embedding_fn:
-            kwargs["embedding_function"] = _embedding_fn
-        coll = client.get_or_create_collection("mobius_knowledge", **kwargs)
         doc_id = f"doc_{hashlib.sha256(text.encode('utf-8')).hexdigest()[:16]}"
+        coll.add(documents=[text], ids=[doc_id], metadatas=[metadata or {}])
+        return True
+    except Exception:
+        return False
+
+
+def rag_add_autonomous(text: str, metadata: Optional[dict] = None) -> bool:
+    """Dodaj do osobnej kolekcji autonomicznej (nie zaśmieca recall_context)."""
+    coll = _get_collection("mobius_autonomous")
+    if not coll:
+        return False
+    try:
+        doc_id = f"auto_{hashlib.sha256(text.encode('utf-8')).hexdigest()[:16]}"
         coll.add(documents=[text], ids=[doc_id], metadatas=[metadata or {}])
         return True
     except Exception:
@@ -60,14 +79,10 @@ def rag_add(text: str, metadata: Optional[dict] = None) -> bool:
 
 def rag_search(query: str, n_results: int = 5) -> list[str]:
     """Wyszukaj podobne fragmenty (semantycznie)."""
-    client = _get_client()
-    if not client:
+    coll = _get_collection("mobius_knowledge")
+    if not coll:
         return []
     try:
-        kwargs = {"metadata": {"hnsw:space": "cosine"}}
-        if _embedding_fn:
-            kwargs["embedding_function"] = _embedding_fn
-        coll = client.get_or_create_collection("mobius_knowledge", **kwargs)
         results = coll.query(query_texts=[query], n_results=n_results)
         docs = results.get("documents", [[]])
         return docs[0] if docs else []
@@ -77,8 +92,8 @@ def rag_search(query: str, n_results: int = 5) -> list[str]:
 
 def rag_add_from_file(path: str) -> tuple[int, str]:
     """Dodaj plik tekstowy do bazy (po liniach/paragrafach). Zwraca (liczba_chunków, status)."""
-    client = _get_client()
-    if not client:
+    coll = _get_collection("mobius_knowledge")
+    if not coll:
         return 0, "ChromaDB niedostępny: pip install chromadb"
     p = Path(path)
     if not p.is_absolute():
@@ -90,10 +105,6 @@ def rag_add_from_file(path: str) -> tuple[int, str]:
         chunks = [c.strip() for c in text.split("\n\n") if len(c.strip()) > 50]
         if not chunks:
             chunks = [c.strip() for c in text.split("\n") if len(c.strip()) > 30]
-        kwargs = {"metadata": {"hnsw:space": "cosine"}}
-        if _embedding_fn:
-            kwargs["embedding_function"] = _embedding_fn
-        coll = client.get_or_create_collection("mobius_knowledge", **kwargs)
         ids = [f"{p.name}_{i}" for i in range(len(chunks))]
         coll.add(documents=chunks, ids=ids, metadatas=[{"source": str(p)}] * len(chunks))
         return len(chunks), f"Dodano {len(chunks)} fragmentów z {p.name}"

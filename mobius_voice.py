@@ -79,7 +79,9 @@ def tts_speak(text: str, voice: str = "pl-PL-ZofiaNeural", blocking: bool = True
                  f"Add-Type -AssemblyName presentationCore; "
                  f"$mp = New-Object System.Windows.Media.MediaPlayer; "
                  f"$mp.Open([uri]'{uri}'); $mp.Play(); "
-                 f"Start-Sleep -Milliseconds ($mp.NaturalDuration.TimeSpan.TotalMilliseconds + 500); "
+                 f"Start-Sleep -Milliseconds 300; "
+                 f"$dur = $mp.NaturalDuration.TimeSpan.TotalMilliseconds; "
+                 f"if ($dur -gt 0) {{ Start-Sleep -Milliseconds ([int]$dur + 300) }}; "
                  f"$mp.Close()"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,

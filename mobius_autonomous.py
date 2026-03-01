@@ -197,15 +197,15 @@ Co zrobić? Odpowiedz Action: lub NONE."""
     if result is None:
         return None
 
-    # Zapisz wynik do RAG (uczenie się)
+    # Zapisz wynik do osobnej kolekcji RAG (nie zaśmieca recall_context)
     try:
-        from mobius_rag import rag_add
+        from mobius_rag import rag_add_autonomous
         meta = {
             "type": "autonomous",
             "timestamp": datetime.now().isoformat(),
             "action": response[:100],
         }
-        rag_add(f"Autonomiczny cykl: {response[:80]} → {result[:200]}", meta)
+        rag_add_autonomous(f"Autonomiczny cykl: {response[:80]} → {result[:200]}", meta)
     except Exception as e:
         log.debug("RAG save: %s", e)
 

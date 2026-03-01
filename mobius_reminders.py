@@ -76,8 +76,9 @@ def add_reminder(text: str, when: Optional[str] = None) -> str:
     reminders = load_reminders()
     raw_when = when or ""
     parsed = _parse_when(raw_when)
+    next_id = max((r.get("id", 0) for r in reminders), default=0) + 1
     r = {
-        "id": len(reminders) + 1,
+        "id": next_id,
         "text": text,
         "when": parsed,
         "raw_when": raw_when,
@@ -92,6 +93,16 @@ def add_reminder(text: str, when: Optional[str] = None) -> str:
 def get_due_reminders() -> list[str]:
     reminders = load_reminders()
     return [r["text"] for r in reminders if r.get("text") and _is_due(r.get("when", ""))][-10:]
+
+
+def _get_due_reminder_ids() -> list[tuple[int, str]]:
+    """Zwraca listę (id, text) dla przypomnień zaległych."""
+    reminders = load_reminders()
+    return [
+        (r["id"], r["text"])
+        for r in reminders
+        if r.get("id") and r.get("text") and _is_due(r.get("when", ""))
+    ][-10:]
 
 
 def get_upcoming_reminders(within_minutes: int = 15) -> list[dict]:

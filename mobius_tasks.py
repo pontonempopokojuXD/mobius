@@ -25,7 +25,18 @@ class TaskQueue:
             return {}
         try:
             data = json.loads(TASKS_FILE.read_text(encoding="utf-8"))
-            return {t["id"]: t for t in data if t.get("status") in ("pending", "running")}
+            tasks = {}
+            for t in data:
+                tid = t.get("id")
+                status = t.get("status")
+                if status not in ("pending", "running"):
+                    continue
+                if status == "running":
+                    t = dict(t)
+                    t["status"] = "failed"
+                    t["error"] = "interrupted"
+                tasks[tid] = t
+            return tasks
         except Exception:
             return {}
 

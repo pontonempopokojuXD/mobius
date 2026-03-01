@@ -18,23 +18,6 @@ MOBIUS_ROOT = Path(__file__).resolve().parent
 #  Narzędzia (Tools)
 # ─────────────────────────────────────────────────────────────────────────────
 
-TOOL_DESCRIPTIONS = """
-Dostępne narzędzia (używaj formatu Action: nazwa(arg1, arg2)):
-- read_file(path) — odczytaj zawartość pliku tekstowego
-- write_file(path, content) — zapisz tekst do pliku
-- list_dir(path) — listuj pliki w katalogu
-- run_shell(command) — wykonaj polecenie w PowerShell/CMD
-- execute_script(script_name, *args) — uruchom skrypt Python z folderu mobius
-- add_reminder(text, when) — dodaj przypomnienie (when opcjonalne: "za 1h", "jutro")
-- rag_search(query, n) — wyszukaj w bazie wiedzy (n=5 domyślnie)
-- rag_add(text) — dodaj fragment do bazy wiedzy
-- rag_add_file(path) — dodaj plik do bazy wiedzy
-- web_search(query, n) — wyszukaj w internecie (DuckDuckGo, n=5 wyników)
-- take_screenshot(description) — zrób zrzut ekranu i opisz przez vision AI
-
-Gdy masz odpowiedź dla użytkownika, zakończ: Final Answer: <odpowiedź>
-"""
-
 
 def tool_read_file(path: str) -> str:
     """Odczytaj plik. path względem mobius lub absolutny."""
