@@ -200,5 +200,5 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=5000)
     parser.add_argument("--host", type=str, default="0.0.0.0")
     args = parser.parse_args()
-    print(f"MOBIUS API → http://{args.host}:{args.port}")
+    print(f"MOBIUS API -> http://{args.host}:{args.port}")
     app.run(host=args.host, port=args.port, debug=False)

@@ -67,4 +67,34 @@ Lenovo G570 (Linux)          PC (Windows + RTX)
 
 ---
 
+## Optymalizacja VRAM (Ollama)
+
+Przy wysokim zużyciu VRAM (~90%) możesz:
+
+### 1. Mniejszy model
+- `qwen2.5:3b` lub `llama3.2:3b` zamiast 7B
+- `ollama pull qwen2.5:3b`
+
+### 2. Kontekst (num_ctx)
+- Ustawienia → Model i inferencja → **Kontekst (num_ctx)**
+- Zmniejsz z 4096 do **2048** lub **1024** — KV cache zajmuje mniej VRAM
+
+### 3. Warstwy na GPU (num_gpu)
+- Ustawienia → Model i inferencja → **Warstwy na GPU (num_gpu)**
+- `-1` = wszystkie warstwy na GPU (domyślne)
+- Np. `20` = tylko 20 warstw na GPU, reszta na CPU — mniej VRAM, wolniejsza inferencja
+- Qwen2.5 7B ma ~28 warstw; eksperymentuj z 18–24
+
+### 4. Zmienne środowiskowe (przed uruchomieniem Ollama)
+```bash
+set OLLAMA_MAX_LOADED=1    # tylko jeden model w pamięci
+```
+Restart usługi Ollama po zmianie.
+
+### 5. Kwantyzacja
+- `qwen2.5:7b` jest już Q4_K_M
+- Możesz spróbować `qwen2.5:7b-instruct-q4_0` (jeśli dostępny) — mniejszy rozmiar
+
+---
+
 *Wygenerowano: 2025-02-28*

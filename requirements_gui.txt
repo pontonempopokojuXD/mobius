@@ -40,3 +40,6 @@ pyperclip>=1.8.2
 
 # HTTP API (n8n)
 flask>=3.0.0
+
+# Wykresy statystyk
+matplotlib>=3.8.0

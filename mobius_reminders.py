@@ -94,6 +94,47 @@ def get_due_reminders() -> list[str]:
     return [r["text"] for r in reminders if r.get("text") and _is_due(r.get("when", ""))][-10:]
 
 
+def get_upcoming_reminders(within_minutes: int = 15) -> list[dict]:
+    """
+    Przypomnienia, ktore beda due w ciagu N minut (ale jeszcze nie sa).
+    Zwraca list[{text, when, minutes_until}]. Pomija te z proactive_fired=True.
+    """
+    reminders = load_reminders()
+    now = datetime.now()
+    result = []
+    for r in reminders:
+        if r.get("proactive_fired"):
+            continue
+        when = r.get("when", "")
+        if not when or not when.strip():
+            continue
+        try:
+            dt = datetime.fromisoformat(when.replace("Z", "")[:19])
+            if dt <= now:
+                continue
+            delta = (dt - now).total_seconds() / 60
+            if 0 < delta <= within_minutes:
+                result.append({
+                    "text": r.get("text", ""),
+                    "when": when,
+                    "minutes_until": int(delta),
+                    "id": r.get("id"),
+                })
+        except (ValueError, TypeError):
+            continue
+    return sorted(result, key=lambda x: x["minutes_until"])[:5]
+
+
+def mark_proactive_fired(reminder_id: int) -> None:
+    """Oznacz przypomnienie jako proactive_fired."""
+    reminders = load_reminders()
+    for r in reminders:
+        if r.get("id") == reminder_id:
+            r["proactive_fired"] = True
+            break
+    save_reminders(reminders)
+
+
 def clear_reminder(reminder_id: int) -> bool:
     reminders = load_reminders()
     reminders = [r for r in reminders if r.get("id") != reminder_id]

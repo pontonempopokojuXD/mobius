@@ -8,6 +8,8 @@ from typing import Any, Callable
 HARDWARE_ALERT = "hardware_alert"
 REMINDER_DUE = "reminder_due"
 TASK_COMPLETED = "task_completed"
+AUTONOMOUS_ACTION = "autonomous_action"
+PROACTIVE_SUGGESTION = "proactive_suggestion"
 WAKE_WORD_DETECTED = "wake_word_detected"
 MODEL_RESPONSE_READY = "model_response_ready"
 AGENT_STEP = "agent_step"

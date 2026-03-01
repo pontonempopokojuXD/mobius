@@ -1,11 +1,12 @@
 """
-MOBIUS Proactive Daemon — monitorowanie zasobów i przypomnień w tle.
+MOBIUS Proactive Daemon — monitorowanie zasobów, przypomnień i autonomiczny cykl AGI.
 """
 
 from __future__ import annotations
 
 import logging
 import threading
+import time
 
 try:
     import psutil
@@ -23,6 +24,7 @@ class ProactiveDaemon:
         self._thread: threading.Thread | None = None
         self._cpu_high_count = 0
         self._ram_high_count = 0
+        self._last_autonomous = 0.0
 
     def start(self) -> None:
         self._stop.clear()
@@ -44,13 +46,33 @@ class ProactiveDaemon:
         cpu_sustained = self._config.get("daemon_cpu_sustained_checks", 3)
         cpu_th = self._config.get("cpu_alert", 90)
         ram_th = self._config.get("ram_alert", 95)
+        autonomous_interval = self._config.get("autonomous_interval_seconds", 300)
 
         while not self._stop.wait(interval):
             try:
                 self._check_reminders()
+                self._check_proactive_reminders()
                 self._check_hardware(cpu_th, ram_th, cpu_sustained)
+                # Autonomiczny cykl AGI co N sekund
+                if self._config.get("autonomous_enabled", True):
+                    now = time.monotonic()
+                    if now - self._last_autonomous >= autonomous_interval:
+                        self._last_autonomous = now
+                        self._run_autonomous_cycle()
             except Exception as e:
                 log.exception("Daemon error: %s", e)
+
+    def _run_autonomous_cycle(self) -> None:
+        """Jeden cykl: Percepcja → Myślenie → Działanie → Uczenie się."""
+        try:
+            from mobius_autonomous import run_cycle
+            from mobius_events import AUTONOMOUS_ACTION
+            result = run_cycle(self._config)
+            if result:
+                self._publish(AUTONOMOUS_ACTION, result)
+                log.info("Autonomous: %s → %s", result.get("action", "")[:60], result.get("result", "")[:80])
+        except Exception as e:
+            log.warning("Autonomous cycle: %s", e)
 
     def _check_reminders(self) -> None:
         try:
@@ -69,6 +91,30 @@ class ProactiveDaemon:
         except Exception as e:
             log.warning("Reminder check error: %s", e)
 
+    def _check_proactive_reminders(self) -> None:
+        """Przypomnienia za 5-15 min: zapytaj LLM o sugestie, wyslij powiadomienie."""
+        if not self._config.get("proactive_enabled", True):
+            return
+        try:
+            from mobius_events import PROACTIVE_SUGGESTION
+            from mobius_autonomous import generate_proactive_suggestion
+            from mobius_reminders import get_upcoming_reminders, mark_proactive_fired
+            upcoming = get_upcoming_reminders(within_minutes=15)
+            for r in upcoming:
+                suggestion = generate_proactive_suggestion(
+                    self._config, r["text"], r["minutes_until"]
+                )
+                msg = f"Za {r['minutes_until']} min: {r['text']}"
+                if suggestion:
+                    msg = f"{msg} {suggestion}"
+                self._publish(PROACTIVE_SUGGESTION, {"message": msg, "reminder_id": r.get("id")})
+                if r.get("id"):
+                    mark_proactive_fired(r["id"])
+                log.info("Proactive: %s", msg[:80])
+                break
+        except Exception as e:
+            log.warning("Proactive check: %s", e)
+
     def _check_hardware(self, cpu_th: float, ram_th: float, cpu_sustained: int) -> None:
         if not _PSUTIL_AVAILABLE:
             return
@@ -80,7 +126,7 @@ class ProactiveDaemon:
             if cpu > cpu_th:
                 self._cpu_high_count += 1
                 if self._cpu_high_count >= cpu_sustained:
-                    self._publish(HARDWARE_ALERT, f"⚠️ CPU wysoki od 3 minut: {cpu:.0f}%")
+                    self._publish(HARDWARE_ALERT, f"CPU wysoki od 3 minut: {cpu:.0f}%")
                     self._cpu_high_count = 0
             else:
                 self._cpu_high_count = 0
@@ -88,7 +134,7 @@ class ProactiveDaemon:
             if ram > ram_th:
                 self._ram_high_count += 1
                 if self._ram_high_count >= cpu_sustained:
-                    self._publish(HARDWARE_ALERT, f"⚠️ RAM wysoki od 3 minut: {ram:.0f}%")
+                    self._publish(HARDWARE_ALERT, f"RAM wysoki od 3 minut: {ram:.0f}%")
                     self._ram_high_count = 0
             else:
                 self._ram_high_count = 0

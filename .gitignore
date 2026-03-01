@@ -36,6 +36,8 @@ env/
 memory.json
 reminders.json
 *.log
+log.txt
+user_profile.json
 mobius_rag_db/
 
 # OS

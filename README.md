@@ -90,9 +90,35 @@ python mobius_api.py --port 5000
 
 ### Integracja z n8n
 
-1. Node: **HTTP Request** → `POST http://localhost:5000/ask`
-2. Body: `{ "prompt": "{{ $json.text }}" }`
-3. Response: `{{ $json.response }}`
+**Uruchomienie API (na PC z MOBIUS):**
+```bash
+python mobius_api.py --port 5000 --host 0.0.0.0
+```
+
+**Adres:** `http://localhost:5000` (lokalnie) lub `http://192.168.1.249:5000` (z innego urządzenia w sieci).
+
+**Autoryzacja (opcjonalna):** Jeśli w `mobius_config.json` ustawisz `api.auth_token`, dodaj header:
+```
+X-MOBIUS-TOKEN: <token>
+```
+
+**Przykłady node'ów HTTP Request:**
+
+| Endpoint | Body | Odpowiedź |
+|----------|------|-----------|
+| `POST /ask` | `{ "prompt": "{{ $json.text }}" }` | `response`, `elapsed_s` |
+| `POST /agent` | `{ "prompt": "..." }` | `response`, `steps`, `elapsed_s` |
+| `POST /reminder` | `{ "text": "...", "when": "2025-03-02 10:00" }` | `status`, `message` |
+| `GET /reminders` | — | `reminders` |
+| `POST /rag/add` | `{ "text": "..." }` | `status` |
+| `POST /rag/search` | `{ "query": "...", "n": 5 }` | `results` |
+| `GET /status` | — | `ollama`, `model`, `version` |
+
+**Minimalny workflow n8n:**
+1. Trigger (np. Webhook, Schedule)
+2. HTTP Request → `POST http://192.168.1.249:5000/ask`
+3. Body: `{ "prompt": "{{ $json.text }}" }`
+4. Użyj `{{ $json.response }}` w kolejnych krokach
 
 ---
 

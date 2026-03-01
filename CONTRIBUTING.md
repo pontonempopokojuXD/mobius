@@ -14,7 +14,14 @@ Dziękujemy za zainteresowanie projektem.
 
 - Kod w Pythonie 3.11+
 - Zachowaj styl: lapidarny, bez zbędnych komentarzy
-- Testy mile widziane (pytest)
+- Testy mile widziane (unittest)
+
+## Testy
+
+```powershell
+python -m unittest discover -s tests -p "test_*.py" -v
+# lub: scripts\run_tests.bat
+```
 - Dokumentacja: aktualizuj README przy nowych funkcjach
 
 ## Obszary do rozwoju

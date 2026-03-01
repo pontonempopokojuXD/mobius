@@ -27,6 +27,8 @@ Cel: autonomiczny AGI w stylu asystentów z uniwersum Marvel.
 ### Faza 2 — Proaktywność ✅
 - [x] Monitorowanie sprzętu — alerty (CPU, RAM, temp GPU)
 - [x] Przypomnienia (add_reminder, wyświetlanie przy starcie)
+- [x] **Autonomiczny cykl AGI** — Percepcja → Myślenie → Działanie → Uczenie się (mobius_autonomous.py)
+- [x] **Proaktywne powiadomienia** — Za 15 min przed przypomnieniem: LLM generuje pytanie, toast + log
 - [ ] Automatyczne podsumowania sesji
 
 ### Faza 3 — Pamięć rozszerzona ✅
