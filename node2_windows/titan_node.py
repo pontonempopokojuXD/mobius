@@ -17,9 +17,19 @@ from concurrent import futures
 from pathlib import Path
 from typing import Iterator, Optional
 
+if "PYTORCH_ALLOC_CONF" not in os.environ:
+    os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
+
 import grpc
 import psutil
 import torch
+
+_max_vram_frac = float(os.environ.get("TITAN_MAX_VRAM_FRACTION", "0.70"))
+if torch.cuda.is_available():
+    try:
+        torch.cuda.set_per_process_memory_fraction(_max_vram_frac, 0)
+    except RuntimeError:
+        pass
 
 # ── Generated gRPC stubs (run: python -m grpc_tools.protoc ...) ──────────────
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "generated"))
