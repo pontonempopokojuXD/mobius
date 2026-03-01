@@ -9,12 +9,6 @@
     ],
     "fetch_models_from_api": true
   },
-  "titan": {
-    "host": "localhost",
-    "port": 50051,
-    "timeout_seconds": 300,
-    "default_model": "mistralai/Mistral-7B-Instruct-v0.3"
-  },
   "agent": {
     "allowed_tools": [
       "read_file",

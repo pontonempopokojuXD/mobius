@@ -9,7 +9,7 @@
 ### 1. PC główny (Windows)
 - **GPU:** RTX (prawdopodobnie RTX 5060 Ti lub inna seria RTX)
 - **OS:** Windows 10/11
-- **Rola:** Główna stacja robocza — GUI MOBIUS, Ollama, opcjonalnie Titan Node
+- **Rola:** Główna stacja robocza — GUI MOBIUS, Ollama
 - **Status:** Działa. Ollama zainstalowane, model qwen2.5:7b pobrany. GUI MOBIUS uruchamiane lokalnie.
 
 ### 2. Laptop Lenovo G570 (Linux)
@@ -27,7 +27,7 @@
 |--------|-------|--------------|
 | **Backend LLM** | **Ollama** | Prostszy setup, działa od razu, GPU RTX wykorzystywane automatycznie |
 | **Model** | qwen2.5:7b | Dobry balans jakość/zasoby, polski |
-| **Titan** | Nie używany | Wymaga złożonej instalacji (PyTorch CUDA, bitsandbytes, flash-attn, triton). Zostawiony na później. |
+| **Titan** | Usunięty | Backend Titan usunięty z projektu. Zobacz branch `backup-with-titan` aby przywrócić. |
 
 ---
 
@@ -41,20 +41,19 @@ PC (Windows + RTX)
 └── Wszystko lokalnie
 ```
 
-### Możliwa (distributed)
+### Możliwa (distributed) — wymaga brancha backup-with-titan
 ```
 Lenovo G570 (Linux)          PC (Windows + RTX)
-     Sentinel  ←── gRPC ──►  Titan
+     Sentinel  ←── gRPC ──►  Titan (usunięty z master)
   (routing, STT)             (LLM na GPU)
 ```
-Laptop jako Node 1, PC jako Node 2 — wymaga uruchomienia `titan_node.py` na PC i `sentinel_node.py` na laptopie.
 
 ---
 
 ## Decyzje projektowe
 
 1. **Ollama > Titan** — na jednym PC z RTX Ollama jest prostsze i wystarczające.
-2. **Titan** — rozważany gdy: konkretny model z Hugging Face, rozbudowa na 2 maszyny, pełna kontrola VRAM.
+2. **Titan** — usunięty. Przywróć z brancha `backup-with-titan` gdy potrzebny distributed setup.
 3. **Laptop G570** — może pełnić rolę Sentinela, ale CPU jest słabe; lżejsze zadania (routing, VAD) realne, Whisper może być wolny.
 
 ---

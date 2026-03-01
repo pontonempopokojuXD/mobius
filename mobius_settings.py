@@ -227,17 +227,6 @@ class SettingsDialog(ctk.CTkToplevel):
         r = self._row(tab, "Timeout (s):")
         ctk.CTkEntry(r, textvariable=self.ollama_timeout_var, width=80).grid(row=0, column=1, sticky="ew")
 
-        self._section(tab, "Titan")
-        self.titan_host_var = ctk.StringVar(value=self._get("titan", "host", "localhost"))
-        r = self._row(tab, "Host:")
-        ctk.CTkEntry(r, textvariable=self.titan_host_var, width=150).grid(row=0, column=1, sticky="ew")
-        self.titan_port_var = ctk.IntVar(value=int(self._get("titan", "port", 50051)))
-        r = self._row(tab, "Port:")
-        ctk.CTkEntry(r, textvariable=self.titan_port_var, width=80).grid(row=0, column=1, sticky="ew")
-        self.titan_timeout_var = ctk.IntVar(value=int(self._get("titan", "timeout_seconds", 300)))
-        r = self._row(tab, "Timeout (s):")
-        ctk.CTkEntry(r, textvariable=self.titan_timeout_var, width=80).grid(row=0, column=1, sticky="ew")
-
     def _tab_persona(self) -> None:
         tab = self.tabview.add("Persona")
         tab.grid_columnconfigure(0, weight=1)
@@ -277,9 +266,6 @@ class SettingsDialog(ctk.CTkToplevel):
 
         data.setdefault("ollama", {})["host"] = self.ollama_host_var.get().rstrip("/")
         data.setdefault("ollama", {})["timeout_seconds"] = self.ollama_timeout_var.get()
-        data.setdefault("titan", {})["host"] = self.titan_host_var.get()
-        data.setdefault("titan", {})["port"] = self.titan_port_var.get()
-        data.setdefault("titan", {})["timeout_seconds"] = self.titan_timeout_var.get()
 
         sp = self.system_prompt_tb.get("1.0", "end").strip()
         if sp:

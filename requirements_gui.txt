@@ -1,6 +1,6 @@
 # ─────────────────────────────────────────────────────────
 #  MOBIUS GUI — Lokalne Centrum Dowodzenia
-#  CustomTkinter | Ollama | Tytan Monitor | Agent | Voice
+#  CustomTkinter | Ollama | Agent | Voice
 # ─────────────────────────────────────────────────────────
 
 customtkinter>=5.2.0
@@ -17,10 +17,6 @@ SpeechRecognition>=3.10.0
 
 # RAG — baza wiedzy
 chromadb>=0.4.0
-
-# Titan (gRPC) — opcjonalnie dla backendu Titan
-grpcio>=1.67.0
-protobuf>=5.28.0
 
 # Powiadomienia Windows (toast) — opcjonalnie
 winotify>=1.1.0

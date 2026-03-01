@@ -33,18 +33,9 @@ python mobius_gui.py
 
 ---
 
-### B) Pełny stack (Node 1 Linux + Node 2 Windows)
+### B) Pełny stack distributed (Node 1 + Node 2) — wymaga brancha backup-with-titan
 
-| Komponent | Maszyna | Port | Uruchomienie |
-|-----------|---------|------|--------------|
-| Titan (gRPC) | Windows / RTX | 50051 | `python node2_windows/titan_node.py` |
-| Sentinel | Linux | — | `python node1_linux/sentinel_node.py --titan-host IP` |
-| GUI | Windows | — | `python mobius_gui.py` |
-
-**Kolejność startu:**
-1. Titan (Node 2) — najpierw
-2. Sentinel (Node 1) — łączy się z Titanem
-3. GUI — opcjonalnie, do lokalnego czatu z Ollama
+Titan (Node 2) został usunięty z master. Aby uruchomić distributed stack, przywróć branch `backup-with-titan`.
 
 ---
 
@@ -52,10 +43,9 @@ python mobius_gui.py
 
 ### 1. Zmienne środowiskowe
 
-**Windows (Titan / GUI):**
+**Windows (GUI):**
 ```powershell
 $env:OLLAMA_HOST = "http://localhost:11434"
-$env:TITAN_DEFAULT_MODEL = "mistralai/Mistral-7B-Instruct-v0.3"
 ```
 
 **Linux (Sentinel):**
