@@ -59,6 +59,12 @@ try:
 except ImportError:
     _DAEMON_AVAILABLE = False
 
+try:
+    from mobius_wakeword import WakeWordListener, WAKEWORD_AVAILABLE as _WAKEWORD_AVAILABLE
+except ImportError:
+    _WAKEWORD_AVAILABLE = False
+    WakeWordListener = None  # type: ignore[assignment,misc]
+
 # pynvml — opcjonalny (RTX 5060 Ti), singleton handle
 try:
     import pynvml
@@ -466,6 +472,8 @@ class MobiusGUI(ctk.CTk):
                 lambda m: self.after(0, lambda msg=m: self._log(msg)),
                 self.config,
             )
+        self._wake_listener: Optional[Any] = None
+        self._wake_active = ctk.BooleanVar(value=False)
         self._build_ui()
         self._start_monitors()
 
@@ -608,6 +616,17 @@ class MobiusGUI(ctk.CTk):
         )
         self.clear_memory_btn.pack(padx=16, pady=(0, 4))
 
+        self.wake_toggle = ctk.CTkCheckBox(
+            self.sidebar,
+            text="👂 Wake word",
+            variable=self._wake_active,
+            command=self._on_wake_toggle,
+            width=200,
+            fg_color=self.colors["accent_dim"],
+            text_color=self.colors["text"],
+        )
+        self.wake_toggle.pack(padx=16, pady=(0, 4))
+
         self.tts_btn = ctk.CTkButton(
             self.sidebar,
             text="🔊 Odtwórz",
@@ -643,6 +662,32 @@ class MobiusGUI(ctk.CTk):
             command=self._open_settings,
         )
         self.settings_btn.pack(padx=16, pady=(0, 8))
+
+    def _on_wake_toggle(self) -> None:
+        if self._wake_active.get():
+            if not _WAKEWORD_AVAILABLE or WakeWordListener is None:
+                self._log("👂 Wake word: pip install faster-whisper sounddevice")
+                self._wake_active.set(False)
+                return
+            self._wake_listener = WakeWordListener(
+                callback=self._on_wake_triggered, config=self.config
+            )
+            self._wake_listener.start()
+            self._log("👂 Wake word aktywny — powiedz 'Mobius'")
+        else:
+            if self._wake_listener:
+                self._wake_listener.stop()
+                self._wake_listener = None
+            self._log("👂 Wake word wyłączony")
+
+    def _on_wake_triggered(self) -> None:
+        def _flash() -> None:
+            self.mic_btn.configure(text="🔴")
+            self.after(300, lambda: self.mic_btn.configure(text="🎤"))
+            self._log("Wake word wykryty — słucham...")
+            self._on_mic()
+
+        self.after(0, _flash)
 
     def _open_settings(self) -> None:
         from mobius_settings import SettingsDialog
@@ -1237,6 +1282,8 @@ class MobiusGUI(ctk.CTk):
         threading.Thread(target=_stream, daemon=True).start()
 
     def on_closing(self) -> None:
+        if self._wake_listener:
+            self._wake_listener.stop()
         if self.config.get("memory_auto_index", True):
             auto_index_session(self.messages, self.session_id)
         save_memory(self.messages)

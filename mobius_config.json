@@ -23,7 +23,8 @@
       "add_reminder",
       "rag_search",
       "rag_add",
-      "rag_add_file"
+      "rag_add_file",
+      "web_search"
     ]
   },
   "gui": {

@@ -5,6 +5,7 @@ Autonomiczny agent w stylu JARVIS/FRIDAY: myśl → działaj → obserwuj.
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 import subprocess
@@ -28,6 +29,8 @@ Dostępne narzędzia (używaj formatu Action: nazwa(arg1, arg2)):
 - rag_search(query, n) — wyszukaj w bazie wiedzy (n=5 domyślnie)
 - rag_add(text) — dodaj fragment do bazy wiedzy
 - rag_add_file(path) — dodaj plik do bazy wiedzy
+- web_search(query, n) — wyszukaj w internecie (DuckDuckGo, n=5 wyników)
+- take_screenshot(description) — zrób zrzut ekranu i opisz przez vision AI
 
 Gdy masz odpowiedź dla użytkownika, zakończ: Final Answer: <odpowiedź>
 """
@@ -147,6 +150,59 @@ def tool_rag_add_file(path: str) -> str:
         return "RAG niedostępny: pip install chromadb"
 
 
+def tool_web_search(query: str, n: str = "5") -> str:
+    """Wyszukaj w internecie przez DuckDuckGo."""
+    try:
+        from duckduckgo_search import DDGS
+        n_int = int(n) if str(n).isdigit() else 5
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=n_int))
+        if not results:
+            return "Brak wyników."
+        parts = [f"{r.get('title', '')}\n{r.get('href', '')}\n{r.get('body', '')}" for r in results]
+        return "\n---\n".join(parts)
+    except ImportError:
+        return "[web_search niedostępny: pip install duckduckgo-search]"
+    except Exception as e:
+        return f"[web_search błąd: {e}]"
+
+
+def tool_take_screenshot(description: str = "") -> str:
+    """Zrób zrzut ekranu i opisz przez Ollama vision (llava)."""
+    try:
+        from PIL import ImageGrab
+    except ImportError:
+        return "[screenshot niedostępny: pip install Pillow]"
+    try:
+        path = MOBIUS_ROOT / "temp_screenshot.png"
+        img = ImageGrab.grab()
+        img.save(str(path))
+    except Exception as e:
+        return f"[Błąd zrzutu ekranu: {e}]"
+    try:
+        import requests as _requests
+        ollama_host = "http://localhost:11434"
+        try:
+            cfg_file = MOBIUS_ROOT / "mobius_config.json"
+            if cfg_file.exists():
+                cfg = json.loads(cfg_file.read_text(encoding="utf-8"))
+                ollama_host = cfg.get("ollama", {}).get("host", ollama_host)
+        except Exception:
+            pass
+        img_data = path.read_bytes()
+        b64 = base64.b64encode(img_data).decode()
+        payload = {
+            "model": "llava",
+            "prompt": description or "Opisz szczegółowo co widzisz na tym zrzucie ekranu.",
+            "images": [b64],
+            "stream": False,
+        }
+        r = _requests.post(f"{ollama_host.rstrip('/')}/api/generate", json=payload, timeout=60)
+        return r.json().get("response", "Brak odpowiedzi")
+    except Exception as e:
+        return f"[Zrzut zapisany: {path}. Ollama vision niedostępna: {e}]"
+
+
 TOOLS: dict[str, Callable[..., str]] = {
     "read_file": lambda path: tool_read_file(path),
     "write_file": lambda path, content: tool_write_file(path, content),
@@ -157,6 +213,8 @@ TOOLS: dict[str, Callable[..., str]] = {
     "rag_search": lambda q, n="5": tool_rag_search(q, n),
     "rag_add": lambda text: tool_rag_add(text),
     "rag_add_file": lambda path: tool_rag_add_file(path),
+    "web_search": lambda q, n="5": tool_web_search(q, n),
+    "take_screenshot": lambda desc="": tool_take_screenshot(desc),
 }
 
 
@@ -206,6 +264,8 @@ _TOOL_SIGS: dict[str, str] = {
     "rag_search": "rag_search(query, n)",
     "rag_add": "rag_add(text)",
     "rag_add_file": "rag_add_file(path)",
+    "web_search": "web_search(query, n)",
+    "take_screenshot": "take_screenshot(description)",
 }
 
 

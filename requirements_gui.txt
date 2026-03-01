@@ -24,3 +24,13 @@ protobuf>=5.28.0
 
 # Powiadomienia Windows (toast) — opcjonalnie
 winotify>=1.1.0
+
+# Lokalny STT + Wake Word (Whisper, offline)
+faster-whisper>=1.0.3
+sounddevice>=0.4.6
+
+# Web search (agent tool)
+duckduckgo-search>=6.0.0
+
+# Vision / screenshots (agent tool)
+Pillow>=10.0.0
