@@ -41,3 +41,6 @@ dateparser>=1.1.8
 # System integration (aktywne okno, schowek)
 pygetwindow>=0.0.9
 pyperclip>=1.8.2
+
+# HTTP API (n8n)
+flask>=3.0.0

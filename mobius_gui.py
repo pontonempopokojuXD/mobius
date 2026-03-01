@@ -1124,6 +1124,8 @@ class MobiusGUI(ctk.CTk):
         if self._daemon:
             self._daemon.start()
 
+        # TODO: autostart mobius_api.py jeśli api.enabled=true
+
     def _on_mic(self) -> None:
         try:
             from mobius_voice import stop_tts

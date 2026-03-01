@@ -54,5 +54,11 @@
     "auto_update": true
   },
   "agent_system_context": false,
-  "wakeword_vad_threshold": 0.01
+  "wakeword_vad_threshold": 0.01,
+  "api": {
+    "enabled": false,
+    "host": "0.0.0.0",
+    "port": 5000,
+    "auth_token": ""
+  }
 }

@@ -72,9 +72,14 @@ def tts_speak(text: str, voice: str = "pl-PL-ZofiaNeural", blocking: bool = True
         asyncio.set_event_loop(loop)
         try:
             mp3_path = loop.run_until_complete(_synthesize())
+            uri = "file:///" + mp3_path.replace("\\", "/")
             proc = subprocess.Popen(
-                ["cmd", "/c", "start", "/wait", "", mp3_path],
-                shell=True,
+                ["powershell", "-NoProfile", "-c",
+                 f"Add-Type -AssemblyName presentationCore; "
+                 f"$mp = New-Object System.Windows.Media.MediaPlayer; "
+                 f"$mp.Open([uri]'{uri}'); $mp.Play(); "
+                 f"Start-Sleep -Milliseconds ($mp.NaturalDuration.TimeSpan.TotalMilliseconds + 500); "
+                 f"$mp.Close()"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )

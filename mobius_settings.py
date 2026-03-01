@@ -18,6 +18,9 @@ ALL_TOOLS = [
     "read_file", "write_file", "list_dir",
     "add_reminder", "rag_search", "rag_add", "rag_add_file",
     "run_shell", "execute_script",
+    "web_search", "take_screenshot",
+    "add_background_task", "get_task_status",
+    "get_active_window", "get_clipboard", "set_clipboard",
 ]
 
 

@@ -105,6 +105,33 @@ python mobius_gui.py
 
 ---
 
+## n8n / HTTP API
+
+```bash
+pip install flask
+python mobius_api.py --port 5000
+```
+
+| Endpoint | Method | Opis |
+|----------|--------|------|
+| `/ask` | POST | Pojedyncze pytanie do LLM |
+| `/agent` | POST | ReAct agent z narzędziami |
+| `/reminder` | POST | Dodaj przypomnienie |
+| `/reminders` | GET | Lista przypomnień |
+| `/rag/add` | POST | Dodaj do bazy wiedzy |
+| `/rag/search` | POST | Wyszukaj w bazie wiedzy |
+| `/task` | POST | Uruchom zadanie w tle |
+| `/task/<id>` | GET | Status zadania |
+| `/status` | GET | Status systemu |
+
+### Integracja z n8n
+
+1. Node: **HTTP Request** → `POST http://localhost:5000/ask`
+2. Body: `{ "prompt": "{{ $json.text }}" }`
+3. Response: `{{ $json.response }}`
+
+---
+
 ## Step 2 — Node 2 Setup (Windows / Titan)
 
 ### 2a. Install PyTorch with CUDA 12.4
