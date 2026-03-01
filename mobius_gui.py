@@ -712,7 +712,9 @@ class MobiusGUI(ctk.CTk):
     def _open_settings(self) -> None:
         from mobius_settings import SettingsDialog
         d = SettingsDialog(self, self.colors, on_save=self._reload_config)
-        d.focus()
+        d.transient(self)
+        d.lift()
+        d.focus_force()
 
     def _subscribe_events(self) -> None:
         if not _EVENTS_AVAILABLE:

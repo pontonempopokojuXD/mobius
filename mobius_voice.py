@@ -72,7 +72,8 @@ def tts_speak(text: str, voice: str = "pl-PL-ZofiaNeural", blocking: bool = True
         asyncio.set_event_loop(loop)
         try:
             mp3_path = loop.run_until_complete(_synthesize())
-            uri = "file:///" + mp3_path.replace("\\", "/")
+            mp3_path_escaped = mp3_path.replace("'", "''")
+            uri = "file:///" + mp3_path_escaped.replace("\\", "/")
             proc = subprocess.Popen(
                 ["powershell", "-NoProfile", "-c",
                  f"Add-Type -AssemblyName presentationCore; "
