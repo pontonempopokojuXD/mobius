@@ -39,7 +39,17 @@
     "ram_threshold_percent": 95
   },
   "memory": {
+    "auto_index_on_close": true,
+    "recall_n_results": 3,
     "max_messages_stored": 500,
     "auto_save_interval_seconds": 30
+  },
+  "daemon": {
+    "enabled": true,
+    "check_interval_seconds": 60,
+    "cpu_sustained_checks": 3
+  },
+  "profile": {
+    "auto_update": true
   }
 }

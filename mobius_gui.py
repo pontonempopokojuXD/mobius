@@ -20,6 +20,45 @@ import customtkinter as ctk
 import psutil
 import requests
 
+try:
+    from mobius_memory import auto_index_session, recall_context, generate_session_id
+    _MEMORY_AVAILABLE = True
+except ImportError:
+    _MEMORY_AVAILABLE = False
+
+    def generate_session_id() -> str:  # type: ignore[misc]
+        return ""
+
+    def auto_index_session(m: list, s: str) -> int:  # type: ignore[misc]
+        return 0
+
+    def recall_context(q: str, n: int = 3) -> str:  # type: ignore[misc]
+        return ""
+
+try:
+    from mobius_profile import load_profile, save_profile, get_profile_prompt, update_profile_from_response
+    _PROFILE_AVAILABLE = True
+except ImportError:
+    _PROFILE_AVAILABLE = False
+
+    def load_profile() -> dict:  # type: ignore[misc]
+        return {"name": "", "preferences": [], "facts": [], "last_updated": ""}
+
+    def save_profile(p: dict) -> None:  # type: ignore[misc]
+        pass
+
+    def get_profile_prompt() -> str:  # type: ignore[misc]
+        return ""
+
+    def update_profile_from_response(r: str, p: dict) -> dict:  # type: ignore[misc]
+        return p
+
+try:
+    from mobius_daemon import ProactiveDaemon
+    _DAEMON_AVAILABLE = True
+except ImportError:
+    _DAEMON_AVAILABLE = False
+
 # pynvml — opcjonalny (RTX 5060 Ti), singleton handle
 try:
     import pynvml
@@ -76,6 +115,12 @@ DEFAULTS = {
     "notify_on_agent": True,
     "system_prompt_override": "",
     "tts_voice": "pl-PL-ZofiaNeural",
+    "memory_auto_index": True,
+    "memory_recall_n": 3,
+    "daemon_enabled": True,
+    "daemon_interval_seconds": 60,
+    "daemon_cpu_sustained_checks": 3,
+    "profile_auto_update": True,
 }
 
 PONTIFEX_SYSTEM_PROMPT = """Jesteś Pontifex Rex — główny architekt systemu MOBIUS.
@@ -107,6 +152,9 @@ def _load_config() -> dict:
         inference = data.get("inference", {})
         notifications = data.get("notifications", {})
         persona = data.get("persona", {})
+        memory = data.get("memory", {})
+        daemon_cfg = data.get("daemon", {})
+        profile_cfg = data.get("profile", {})
         return {
             "ollama_host": ollama.get("host", DEFAULTS["ollama_host"]),
             "ollama_timeout": ollama.get("timeout_seconds", DEFAULTS["ollama_timeout"]),
@@ -131,6 +179,12 @@ def _load_config() -> dict:
             "notify_on_agent": notifications.get("on_agent", DEFAULTS["notify_on_agent"]),
             "system_prompt_override": persona.get("system_prompt_override", DEFAULTS["system_prompt_override"]),
             "tts_voice": data.get("voice", {}).get("tts_voice", "pl-PL-ZofiaNeural"),
+            "memory_auto_index": memory.get("auto_index_on_close", True),
+            "memory_recall_n": int(memory.get("recall_n_results", 3)),
+            "daemon_enabled": daemon_cfg.get("enabled", True),
+            "daemon_interval_seconds": int(daemon_cfg.get("check_interval_seconds", 60)),
+            "daemon_cpu_sustained_checks": int(daemon_cfg.get("cpu_sustained_checks", 3)),
+            "profile_auto_update": profile_cfg.get("auto_update", True),
         }
     except Exception as e:
         log.warning("Nie można wczytać config: %s", e)
@@ -400,12 +454,19 @@ class MobiusGUI(ctk.CTk):
         self.configure(fg_color=self.colors["bg"])
 
         self.messages: list[dict[str, str]] = load_memory()
+        self.session_id: str = generate_session_id()
+        self.profile: dict = load_profile()
         self.model_var = ctk.StringVar(value="")
         self.ollama_online = False
         self._models_fetched = False
         self._alert_fired: set[str] = set()
+        self._daemon: Optional[Any] = None
+        if _DAEMON_AVAILABLE and self.config.get("daemon_enabled", True):
+            self._daemon = ProactiveDaemon(
+                lambda m: self.after(0, lambda msg=m: self._log(msg)),
+                self.config,
+            )
         self._build_ui()
-        self._show_reminders_on_start()
         self._start_monitors()
 
     def _build_ui(self) -> None:
@@ -693,9 +754,13 @@ class MobiusGUI(ctk.CTk):
             self._log("Błąd schowka.")
 
     def _get_system_prompt(self) -> str:
-        """System prompt — nadpisany lub domyślny."""
+        """System prompt — nadpisany lub domyślny, z profilem użytkownika."""
         override = self.config.get("system_prompt_override", "").strip()
-        return override if override else PONTIFEX_SYSTEM_PROMPT
+        base = override if override else PONTIFEX_SYSTEM_PROMPT
+        profile_ctx = get_profile_prompt()
+        if profile_ctx:
+            return base + "\n\n" + profile_ctx
+        return base
 
     def _notify(self, title: str, msg: str) -> None:
         """Powiadomienie Windows (toast). Sprawdza config."""
@@ -856,17 +921,6 @@ class MobiusGUI(ctk.CTk):
             self.chat_text.see("end")
             self.chat_text.configure(state="disabled")
 
-    def _show_reminders_on_start(self) -> None:
-        """Wyświetl przypomnienia przy starcie."""
-        try:
-            from mobius_reminders import get_due_reminders
-            reminders = get_due_reminders()
-            if reminders:
-                for r in reminders[:3]:
-                    self._log(f"⏰ Przypomnienie: {r[:60]}...")
-        except ImportError:
-            pass
-
     def _update_hardware(self) -> None:
         cpu = get_cpu_usage()
         self.cpu_label.configure(text=f"CPU: {cpu:.1f}%")
@@ -945,12 +999,14 @@ class MobiusGUI(ctk.CTk):
 
         self.after(500, _tick)
 
-        # Periodic connection check
         def _conn_tick() -> None:
             self._check_connection()
-            self.after(10000, _conn_tick)
+            self.after(self.config["conn_check_ms"], _conn_tick)
 
         self.after(15000, _conn_tick)
+
+        if self._daemon:
+            self._daemon.start()
 
     def _on_mic(self) -> None:
         try:
@@ -1018,6 +1074,11 @@ class MobiusGUI(ctk.CTk):
 
             backend = self.backend_var.get()
             allowed = self.config.get("agent_allowed_tools")
+            recall = recall_context(user_text, n=self.config.get("memory_recall_n", 3))
+            system = self._get_system_prompt()
+            if recall:
+                system = system + "\n\n## Kontekst z poprzednich sesji:\n" + recall
+            system = system + "\n\nMasz dostęp do narzędzi. Używaj ich gdy potrzebne."
 
             def _generate(p: str, sys: str) -> str:
                 if backend == "Titan":
@@ -1047,7 +1108,6 @@ class MobiusGUI(ctk.CTk):
                 )
                 return resp
 
-            system = self._get_system_prompt() + "\n\nMasz dostęp do narzędzi. Używaj ich gdy potrzebne."
             response, steps = run_agent_loop(
                 _generate, user_text, system,
                 allowed_tools=allowed,
@@ -1062,6 +1122,11 @@ class MobiusGUI(ctk.CTk):
                 self.send_btn.configure(state="normal")
                 self.mic_btn.configure(state="normal")
                 self._notify("MOBIUS", "Agent zakończony.")
+                if self.config.get("profile_auto_update", True) and response:
+                    updated = update_profile_from_response(response, self.profile)
+                    if updated != self.profile:
+                        self.profile = updated
+                        save_profile(self.profile)
 
             self.after(0, _done)
         except Exception as e:
@@ -1076,6 +1141,10 @@ class MobiusGUI(ctk.CTk):
         start = time.perf_counter()
         full_response: list[str] = []
         backend = self.backend_var.get()
+        recall = recall_context(user_text, n=self.config.get("memory_recall_n", 3))
+        system = self._get_system_prompt()
+        if recall:
+            system = system + "\n\n## Kontekst z poprzednich sesji:\n" + recall
 
         def _stream() -> None:
             try:
@@ -1091,7 +1160,7 @@ class MobiusGUI(ctk.CTk):
                         host=self.config.get("titan_host", "localhost"),
                         port=self.config.get("titan_port", 50051),
                         prompt=prompt,
-                        system=self._get_system_prompt(),
+                        system=system,
                         model_id=self.config.get("titan_model", ""),
                         max_new_tokens=self.config.get("max_new_tokens", 512),
                         temperature=self.config.get("temperature", 0.7),
@@ -1102,7 +1171,7 @@ class MobiusGUI(ctk.CTk):
                         base_url=self.ollama_base,
                         model=self.model_var.get(),
                         prompt=prompt,
-                        system=self._get_system_prompt(),
+                        system=system,
                         timeout=self.ollama_timeout,
                         temperature=self.config.get("temperature", 0.7),
                         top_p=self.config.get("top_p", 0.9),
@@ -1122,13 +1191,12 @@ class MobiusGUI(ctk.CTk):
 
                 response = "".join(full_response)
 
-                # Fallback: jeśli streaming nic nie zwrócił, spróbuj bez streamu
-                if not response:
+                if not response and backend != "Titan":
                     resp_text, _ = ollama_generate(
                         self.ollama_base,
                         self.model_var.get(),
                         prompt,
-                        self._get_system_prompt(),
+                        system,
                         timeout=self.ollama_timeout,
                         temperature=self.config.get("temperature", 0.7),
                         top_p=self.config.get("top_p", 0.9),
@@ -1152,6 +1220,11 @@ class MobiusGUI(ctk.CTk):
                     self.send_btn.configure(state="normal")
                     self.mic_btn.configure(state="normal")
                     self._notify("MOBIUS", "Odpowiedź gotowa.")
+                    if self.config.get("profile_auto_update", True) and response:
+                        updated = update_profile_from_response(response, self.profile)
+                        if updated != self.profile:
+                            self.profile = updated
+                            save_profile(self.profile)
 
                 self.after(0, _done)
             except Exception as e:
@@ -1164,7 +1237,11 @@ class MobiusGUI(ctk.CTk):
         threading.Thread(target=_stream, daemon=True).start()
 
     def on_closing(self) -> None:
+        if self.config.get("memory_auto_index", True):
+            auto_index_session(self.messages, self.session_id)
         save_memory(self.messages)
+        if self._daemon:
+            self._daemon.stop()
         self.destroy()
 
 
